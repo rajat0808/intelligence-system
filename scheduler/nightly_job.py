@@ -1,6 +1,26 @@
 ﻿import json
+import importlib
 from datetime import date
+from pathlib import Path
+import sys
+
 from sqlalchemy import text
+
+
+def _ensure_app_package():
+    try:
+        import app  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        # Allow running when the repo directory is not named "app".
+        repo_root = Path(__file__).resolve().parents[1]
+        parent_dir = repo_root.parent
+        if str(parent_dir) not in sys.path:
+            sys.path.insert(0, str(parent_dir))
+        sys.modules["app"] = importlib.import_module(repo_root.name)
+
+
+_ensure_app_package()
 
 from app.database import SessionLocal
 from app.config import get_settings
@@ -29,10 +49,12 @@ def nightly_run():
     today = date.today()
 
     inventories = db.execute(text("""
-        SELECT i.*, p.category
+        SELECT i.*, p.category, p.mrp
         FROM inventory i
         JOIN products p ON p.id = i.product_id
     """)).fetchall()
+
+    sent_alerts = set()
 
     try:
         for inv in inventories:
@@ -65,6 +87,8 @@ def nightly_run():
                     status=status,
                     demand_band="M",
                     quantity=inv.quantity,
+                    cost_price=inv.cost_price,
+                    mrp=inv.mrp,
                     stock_value=inv.quantity * inv.cost_price,
                     decision=json.dumps(decision)
                 )
@@ -96,6 +120,9 @@ def nightly_run():
             # =========================
             if alert_reason:
                 for recipient_name, phone in RECIPIENTS:
+                    alert_key = (today, alert_reason, inv.category, phone)
+                    if alert_key in sent_alerts:
+                        continue
 
                     if alert_already_sent(
                         db,
@@ -104,6 +131,7 @@ def nightly_run():
                         category=inv.category,
                         phone=phone
                     ):
+                        sent_alerts.add(alert_key)
                         continue
 
                     capital_locked = "{:,.0f}".format(inv.quantity * inv.cost_price)
@@ -142,6 +170,7 @@ def nightly_run():
                                 delivered=True
                             )
                         )
+                        sent_alerts.add(alert_key)
 
                     except Exception as e:
                         db.add(
@@ -157,6 +186,7 @@ def nightly_run():
                                 failure_reason=str(e)
                             )
                         )
+                        sent_alerts.add(alert_key)
 
         db.commit()
 

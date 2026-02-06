@@ -14,29 +14,29 @@ _DASHBOARD_HTML = """
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Inventory Intelligence Dashboard</title>
+    <title>SINDH Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" cross origin>
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Sora:wght@300;400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Frances:wght@500;700&family=Sora:wght@300;400;600&display=swap"
       rel="stylesheet"
     >
     <style>
       :root {
-        --ink-900: #1c2422;
-        --ink-700: #2f3b38;
-        --ink-500: #4f5c59;
-        --sand-100: #f7f4ee;
-        --sand-200: #f1ede6;
-        --mist-100: #eef5f2;
-        --mint-400: #5cb8a6;
-        --mint-600: #2d8a78;
-        --coral-500: #e18a4c;
-        --sun-400: #f6c46b;
-        --steel-400: #91a3ad;
+        --ink-900: #111111;
+        --ink-700: #2b2b2b;
+        --ink-500: #4a4a4a;
+        --sand-100: #ffffff;
+        --sand-200: #f4f4f4;
+        --mist-100: #ededed;
+        --mint-400: #1f1f1f;
+        --mint-600: #000000;
+        --coral-500: #2f2f2f;
+        --sun-400: #3a3a3a;
+        --steel-400: #5a5a5a;
         --white: #ffffff;
-        --shadow: 0 20px 45px rgba(26, 35, 33, 0.12);
-        --shadow-soft: 0 12px 28px rgba(26, 35, 33, 0.08);
+        --shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+        --shadow-soft: 0 12px 28px rgba(0, 0, 0, 0.1);
         --radius-lg: 22px;
         --radius-md: 16px;
       }
@@ -51,8 +51,8 @@ _DASHBOARD_HTML = """
         font-family: "Sora", "Noto Sans", sans-serif;
         color: var(--ink-900);
         background:
-          radial-gradient(1200px 600px at 10% -10%, #ffe7c4 0, transparent 55%),
-          radial-gradient(900px 520px at 110% 10%, #cfe5ff 0, transparent 50%),
+          radial-gradient(1100px 560px at 10% -10%, #f5f5f5 0, transparent 55%),
+          radial-gradient(900px 520px at 110% 10%, #e9e9e9 0, transparent 50%),
           linear-gradient(180deg, var(--sand-100) 0%, var(--mist-100) 100%);
         position: relative;
       }
@@ -62,8 +62,8 @@ _DASHBOARD_HTML = """
         position: fixed;
         inset: 0;
         background-image:
-          radial-gradient(rgba(28, 36, 34, 0.05) 1px, transparent 0),
-          radial-gradient(rgba(28, 36, 34, 0.04) 1px, transparent 0);
+          radial-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 0),
+          radial-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 0);
         background-size: 22px 22px, 28px 28px;
         background-position: 0 0, 7px 9px;
         pointer-events: none;
@@ -93,7 +93,7 @@ _DASHBOARD_HTML = """
       }
 
       h1 {
-        font-family: "Fraunces", "Georgia", serif;
+        font-family: "Frances", "Georgia", serif;
         font-size: clamp(28px, 4vw, 40px);
         margin: 0;
         color: var(--ink-900);
@@ -110,6 +110,7 @@ _DASHBOARD_HTML = """
         display: flex;
         gap: 12px;
         align-items: center;
+        flex-wrap: wrap;
       }
 
       .chip {
@@ -126,7 +127,7 @@ _DASHBOARD_HTML = """
         border: none;
         padding: 12px 18px;
         border-radius: 999px;
-        background: linear-gradient(120deg, var(--mint-600), var(--mint-400));
+        background: var(--ink-900);
         color: var(--white);
         font-weight: 600;
         cursor: pointer;
@@ -137,6 +138,12 @@ _DASHBOARD_HTML = """
       .button:hover {
         transform: translateY(-1px);
         box-shadow: var(--shadow);
+      }
+
+      .button-outline {
+        background: var(--white);
+        color: var(--ink-900);
+        border: 1px solid rgba(0, 0, 0, 0.2);
       }
 
       .grid {
@@ -193,7 +200,7 @@ _DASHBOARD_HTML = """
       }
 
       .panel-title {
-        font-family: "Fraunces", "Georgia", serif;
+        font-family: "Frances", "Georgia", serif;
         font-size: 20px;
         margin: 0;
       }
@@ -246,18 +253,40 @@ _DASHBOARD_HTML = """
       }
 
       .pill.early {
-        background: rgba(246, 196, 107, 0.2);
-        color: #a1660d;
+        background: rgba(0, 0, 0, 0.08);
+        color: var(--ink-900);
       }
 
       .pill.high {
-        background: rgba(225, 138, 76, 0.18);
-        color: #a0501b;
+        background: rgba(0, 0, 0, 0.16);
+        color: var(--ink-900);
       }
 
       .pill.critical {
-        background: rgba(201, 80, 63, 0.18);
-        color: #8d2f24;
+        background: rgba(0, 0, 0, 0.24);
+        color: var(--ink-900);
+      }
+
+      .pill.none {
+        background: rgba(0, 0, 0, 0.04);
+        color: var(--ink-700);
+      }
+
+      .search {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .search-input {
+        border: 1px solid rgba(0, 0, 0, 0.18);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font-size: 13px;
+        min-width: 220px;
+        background: var(--white);
+        color: var(--ink-900);
       }
 
       .total {
@@ -291,6 +320,12 @@ _DASHBOARD_HTML = """
           width: 100%;
           justify-content: space-between;
         }
+        .search {
+          width: 100%;
+        }
+        .search-input {
+          width: 100%;
+        }
         table, thead, tbody, th, td, tr {
           display: block;
         }
@@ -323,8 +358,8 @@ _DASHBOARD_HTML = """
     <div class="page">
       <header>
         <div class="title">
-          <div class="subtitle">Inventory Intelligence</div>
-          <h1>Store Danger Dashboard</h1>
+          <div class="subtitle">SINDH</div>
+          <h1>SINDH Store Danger Dashboard</h1>
         </div>
         <div class="controls">
           <div class="chip" id="as-of">As of --</div>
@@ -375,6 +410,35 @@ _DASHBOARD_HTML = """
           </table>
           <div class="status" id="status">Fetching latest data.</div>
         </div>
+
+        <div class="panel">
+          <header>
+            <div>
+              <h3 class="panel-title">Inventory Search</h3>
+              <div class="panel-sub">Search by style code or article name.</div>
+            </div>
+            <div class="search">
+              <input class="search-input" id="search-input" placeholder="Search inventory" />
+              <button class="button button-outline" id="search-button">Search</button>
+            </div>
+          </header>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Style</th>
+                <th>Article</th>
+                <th>Store</th>
+                <th>Qty</th>
+                <th>Danger</th>
+              </tr>
+            </thead>
+            <tbody id="search-rows">
+              <tr><td class="empty" colspan="5">Enter a query to search inventory.</td></tr>
+            </tbody>
+          </table>
+          <div class="status" id="search-status">Waiting for query.</div>
+        </div>
       </section>
     </div>
 
@@ -412,6 +476,29 @@ _DASHBOARD_HTML = """
             <td data-label="High"><span class="pill high">HIGH</span>${formatCurrency.format(row.HIGH || 0)}</td>
             <td data-label="Critical"><span class="pill critical">CRITICAL</span>${formatCurrency.format(row.CRITICAL || 0)}</td>
             <td class="total" data-label="Total">${formatCurrency.format(row.total_danger_capital || 0)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      };
+
+      const renderSearchEmpty = (message) => {
+        const tbody = document.getElementById("search-rows");
+        tbody.innerHTML = `<tr><td class="empty" colspan="5">${message}</td></tr>`;
+      };
+
+      const renderSearchTable = (rows) => {
+        const tbody = document.getElementById("search-rows");
+        tbody.innerHTML = "";
+        rows.forEach((row) => {
+          const level = row.danger_level || "NONE";
+          const levelClass = level === "NONE" ? "none" : level.toLowerCase();
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td data-label="Style">${row.style_code}</td>
+            <td data-label="Article">${row.article_name}</td>
+            <td data-label="Store">Store ${row.store_id}</td>
+            <td data-label="Qty">${row.quantity}</td>
+            <td data-label="Danger"><span class="pill ${levelClass}">${level}</span></td>
           `;
           tbody.appendChild(tr);
         });
@@ -458,7 +545,43 @@ _DASHBOARD_HTML = """
         }
       };
 
+      const searchInventory = async () => {
+        const input = document.getElementById("search-input");
+        const status = document.getElementById("search-status");
+        const query = input.value.trim();
+
+        if (query.length < 2) {
+          renderSearchEmpty("Enter at least 2 characters.");
+          status.textContent = "Waiting for query.";
+          return;
+        }
+
+        status.textContent = "Searching...";
+        try {
+          const response = await fetch(`/search/inventory?query=${encodeURIComponent(query)}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const data = await response.json();
+          if (!data.results || data.results.length === 0) {
+            renderSearchEmpty("No matches found.");
+          } else {
+            renderSearchTable(data.results);
+          }
+          status.textContent = `Found ${data.count} items.`;
+        } catch (error) {
+          renderSearchEmpty("Search failed. Check the API and try again.");
+          status.textContent = `Error: ${error.message}`;
+        }
+      };
+
       document.getElementById("refresh").addEventListener("click", loadDashboard);
+      document.getElementById("search-button").addEventListener("click", searchInventory);
+      document.getElementById("search-input").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          searchInventory();
+        }
+      });
       loadDashboard();
     </script>
   </body>
