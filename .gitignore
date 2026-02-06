@@ -13,6 +13,13 @@ venv/
 
 .idea/
 .pytest_cache/
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 datasource/*.xlsx
 !datasource/daily_update_template.xlsx

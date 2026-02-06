@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include .env.example
+include requirements.txt
+include datasource/daily_update_template.xlsx
+include scripts/import_excel.py
+include scripts/run_excel_import.ps1

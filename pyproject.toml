@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inventory-intelligence-platform"
+version = "0.1.0"
+description = "FastAPI service for tracking inventory risk, surfacing danger alerts, and sending notifications."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [{name = "SINDH"}]
+dependencies = [
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.23.0",
+  "sqlalchemy>=2.0",
+  "pydantic-settings>=2.0",
+  "openpyxl>=3.1",
+]
+
+[tool.setuptools]
+py-modules = ["main", "config", "database"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "api*", "intelligence*", "ml*", "models*", "scheduler*", "services*"]
