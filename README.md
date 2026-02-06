@@ -32,6 +32,16 @@ Then open:
 - `http://localhost:8000/` for health
 - `http://localhost:8000/dashboard/` for the dashboard
 
+## Testing
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+## Packaging (optional)
+```powershell
+python -m pip install -e .
+```
+
 ## Configuration
 Settings load from environment variables or a `.env` file in the repo root.
 Copy `.env.example` to `.env` and update values as needed.
