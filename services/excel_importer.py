@@ -1,11 +1,12 @@
 import importlib
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from openpyxl import load_workbook
 from sqlalchemy import select as sa_select
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.config import get_settings
 from app.database import Base, SessionLocal, engine, ensure_sqlite_schema
 from app.models.inventory import Inventory
 from app.models.product import Product
@@ -17,6 +18,12 @@ _ALIAS_SPECS = (
     (("style", "code"), "style_code"),
     (("article", "name"), "article_name"),
     (("supplier", "name"), "supplier_name"),
+    (("department", "name"), "department_name"),
+    (("category", "name"), "category"),
+    (("item", "mrp"), "mrp"),
+    (("stock", "days"), "stock_days"),
+    (("cbs", "qty"), "quantity"),
+    (("qty",), "quantity"),
     (("cost", "price"), "cost_price"),
     (("current", "price"), "current_price"),
     (("lifecycle", "start"), "lifecycle_start_date"),
@@ -45,8 +52,18 @@ REQUIRED_COLUMNS = {
         "current_price",
         "lifecycle_start_date",
     },
+    "daily_update": {
+        "store_id",
+        "style_code",
+        "supplier_name",
+        "stock_days",
+        "department_name",
+        "category",
+        "mrp",
+    },
 }
 
+DAILY_UPDATE_SHEET = "daily_update"
 DEFAULT_SHEET_ORDER = ["stores", "products", "inventory"]
 
 
@@ -65,6 +82,33 @@ def _import_models():
 
 def _is_blank(value):
     return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _is_summary_value(value):
+    if isinstance(value, str):
+        value_text = value.strip().lower()
+        if value_text and "total" in value_text:
+            return True
+    return False
+
+
+def _is_footer_value(value):
+    if not isinstance(value, str):
+        return False
+    value_text = value.strip().lower()
+    return value_text.startswith("printed on") or value_text.startswith("generated on")
+
+
+def _looks_like_header_row(row, header_set):
+    matches = 0
+    non_blank = 0
+    for value in row:
+        if _is_blank(value):
+            continue
+        non_blank += 1
+        if normalize_header(value) in header_set:
+            matches += 1
+    return non_blank > 0 and matches == non_blank
 
 
 def normalize_header(value):
@@ -86,7 +130,12 @@ def normalize_header(value):
 
 
 def normalize_sheet_name(name):
-    return str(name).strip().lower()
+    value_text = str(name).strip().lower()
+    if not value_text:
+        return ""
+    for char in (" ", "-", ".", "/"):
+        value_text = value_text.replace(char, "_")
+    return "_".join(part for part in value_text.split("_") if part)
 
 
 def normalize_sheet_list(value):
@@ -97,6 +146,40 @@ def normalize_sheet_list(value):
     else:
         items = [part.strip() for part in str(value).split(",") if part.strip()]
     return items or None
+
+
+def get_daily_update_aliases():
+    settings = get_settings()
+    aliases = normalize_sheet_list(settings.EXCEL_DAILY_UPDATE_SHEET_ALIASES)
+    if not aliases:
+        return []
+    return [normalize_sheet_name(name) for name in aliases]
+
+
+def apply_daily_update_aliases(sheet_map, aliases):
+    if not aliases or DAILY_UPDATE_SHEET in sheet_map:
+        return
+    for alias in aliases:
+        actual_name = sheet_map.get(alias)
+        if actual_name:
+            sheet_map[DAILY_UPDATE_SHEET] = actual_name
+            break
+
+
+def should_create_missing_stores():
+    settings = get_settings()
+    return bool(settings.EXCEL_CREATE_MISSING_STORES)
+
+
+def ensure_store_exists(db, store_id):
+    if not should_create_missing_stores():
+        return
+    if store_id is None:
+        return
+    if db.get(Store, store_id):
+        return
+    db.add(Store(id=store_id, name=f"Store {store_id}", city="Unknown"))
+    db.flush()
 
 
 def to_str(value, field, required=True):
@@ -172,11 +255,26 @@ def load_sheet_rows(worksheet):
     header_keys = [normalize_header(header) for header in headers]
     indices = [(idx, key) for idx, key in enumerate(header_keys) if key]
     columns = {key for key in header_keys if key}
+    store_idx = None
+    for idx, key in indices:
+        if key == "store_id":
+            store_idx = idx
+            break
 
     rows = []
     for row in rows_iter:
         if row is None or all(_is_blank(value) for value in row):
             continue
+        if _looks_like_header_row(row, columns):
+            continue
+        if store_idx is not None and store_idx < len(row):
+            store_value = row[store_idx]
+            if _is_blank(store_value):
+                continue
+            if _is_summary_value(store_value):
+                continue
+            if _is_footer_value(store_value):
+                continue
         record = {key: row[idx] for idx, key in indices}
         rows.append(record)
     return rows, columns
@@ -185,6 +283,9 @@ def load_sheet_rows(worksheet):
 def validate_columns(sheet_name, columns):
     required = REQUIRED_COLUMNS[sheet_name]
     missing = sorted(required - columns)
+    if sheet_name == DAILY_UPDATE_SHEET and "stock_days" in missing:
+        if "lifecycle_start_date" in columns:
+            missing.remove("stock_days")
     if missing:
         missing_text = ", ".join(missing)
         raise ValueError(f"{sheet_name} sheet missing columns: {missing_text}")
@@ -222,12 +323,17 @@ def upsert_store(db, row):
 def upsert_product(db, row):
     product_id = to_int(row.get("id"), "id", required=False)
     store_id = to_int(row.get("store_id"), "store_id")
+    ensure_store_exists(db, store_id)
     style_code = to_str(row.get("style_code"), "style_code")
     barcode = to_str(row.get("barcode"), "barcode")
     article_name = to_str(row.get("article_name"), "article_name")
     category = to_str(row.get("category"), "category")
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
+    department_value = row.get("department_name")
+    department_name = None
+    if not _is_blank(department_value):
+        department_name = to_str(department_value, "department_name")
 
     product = get_existing(
         db,
@@ -246,12 +352,17 @@ def upsert_product(db, row):
         "supplier_name": supplier_name,
         "mrp": mrp,
     }
+    if department_name is not None:
+        values["department_name"] = department_name
+    elif not product:
+        values["department_name"] = ""
     return apply_upsert(db, product, Product, values)
 
 
 def upsert_inventory(db, row):
     inventory_id = to_int(row.get("id"), "id", required=False)
     store_id = to_int(row.get("store_id"), "store_id")
+    ensure_store_exists(db, store_id)
     product_id = to_int(row.get("product_id"), "product_id")
     quantity = to_int(row.get("quantity"), "quantity")
     cost_price = to_float(row.get("cost_price"), "cost_price")
@@ -276,9 +387,117 @@ def upsert_inventory(db, row):
     return apply_upsert(db, inventory, Inventory, values)
 
 
+def resolve_price(value, fallback, field):
+    if not _is_blank(value):
+        return to_float(value, field)
+    if _is_blank(fallback):
+        raise ValueError(f"{field} is required")
+    return to_float(fallback, field)
+
+
+def resolve_lifecycle_start_date(row):
+    lifecycle_value = row.get("lifecycle_start_date")
+    if not _is_blank(lifecycle_value):
+        return to_date(lifecycle_value, "lifecycle_start_date")
+    stock_days = to_int(row.get("stock_days"), "stock_days")
+    return date.today() - timedelta(days=stock_days)
+
+
+def upsert_product_from_daily_update(db, row):
+    store_id = to_int(row.get("store_id"), "store_id")
+    ensure_store_exists(db, store_id)
+    style_code = to_str(row.get("style_code"), "style_code")
+    barcode_value = row.get("barcode")
+    barcode = (
+        to_str(barcode_value, "barcode")
+        if not _is_blank(barcode_value)
+        else style_code
+    )
+    article_value = row.get("article_name")
+    article_name = (
+        to_str(article_value, "article_name")
+        if not _is_blank(article_value)
+        else style_code
+    )
+    category = to_str(row.get("category"), "category")
+    supplier_name = to_str(row.get("supplier_name"), "supplier_name")
+    mrp = to_float(row.get("mrp"), "mrp")
+    department_name = to_str(row.get("department_name"), "department_name")
+
+    product = get_existing(
+        db,
+        Product,
+        None,
+        Product.store_id == store_id,
+        Product.style_code == style_code,
+        Product.barcode == barcode,
+    )
+    values = {
+        "store_id": store_id,
+        "style_code": style_code,
+        "barcode": barcode,
+        "article_name": article_name,
+        "category": category,
+        "supplier_name": supplier_name,
+        "mrp": mrp,
+        "department_name": department_name,
+    }
+    if product:
+        for key, value in values.items():
+            setattr(product, key, value)
+        return "updated", product
+    product = Product(**values)
+    db.add(product)
+    db.flush()
+    return "inserted", product
+
+
+def upsert_inventory_from_daily_update(db, row, product):
+    store_id = product.store_id
+    product_id = product.id
+    quantity = to_int(row.get("quantity"), "quantity", required=False)
+    if quantity is None:
+        quantity = 0
+    mrp = to_float(row.get("mrp"), "mrp")
+    cost_price = resolve_price(row.get("cost_price"), mrp, "cost_price")
+    current_price = resolve_price(row.get("current_price"), mrp, "current_price")
+    lifecycle_start_date = resolve_lifecycle_start_date(row)
+
+    inventory = get_existing(
+        db,
+        Inventory,
+        None,
+        Inventory.store_id == store_id,
+        Inventory.product_id == product_id,
+    )
+    values = {
+        "store_id": store_id,
+        "product_id": product_id,
+        "quantity": quantity,
+        "cost_price": cost_price,
+        "current_price": current_price,
+        "lifecycle_start_date": lifecycle_start_date,
+    }
+    return apply_upsert(db, inventory, Inventory, values)
+
+
+def import_daily_update_row(db, row):
+    counts = {"inserted": 0, "updated": 0, "skipped": 0}
+    product_action, product = upsert_product_from_daily_update(db, row)
+    counts[product_action] += 1
+    inventory_action = upsert_inventory_from_daily_update(db, row, product)
+    counts[inventory_action] += 1
+    return counts
+
+
 def import_rows(db, sheet_name, rows):
     counts = {"inserted": 0, "updated": 0, "skipped": 0}
     for row in rows:
+        if sheet_name == DAILY_UPDATE_SHEET:
+            row_counts = import_daily_update_row(db, row)
+            for key, value in row_counts.items():
+                counts[key] += value
+            continue
         if sheet_name == "stores":
             action = upsert_store(db, row)
         elif sheet_name == "products":
@@ -300,15 +519,30 @@ def import_workbook(workbook_path, sheets=None, dry_run=False):
 
     workbook = load_workbook(workbook_path, data_only=True)
     sheet_map = {normalize_sheet_name(name): name for name in workbook.sheetnames}
+    daily_update_aliases = get_daily_update_aliases()
+    apply_daily_update_aliases(sheet_map, daily_update_aliases)
 
     sheet_list = normalize_sheet_list(sheets)
     if sheet_list:
-        requested = [normalize_sheet_name(name) for name in sheet_list]
+        requested = []
+        for name in sheet_list:
+            key = normalize_sheet_name(name)
+            if key in daily_update_aliases:
+                key = DAILY_UPDATE_SHEET
+            requested.append(key)
     else:
-        requested = [name for name in DEFAULT_SHEET_ORDER if name in sheet_map]
+        if DAILY_UPDATE_SHEET in sheet_map:
+            requested = [DAILY_UPDATE_SHEET]
+        else:
+            requested = [name for name in DEFAULT_SHEET_ORDER if name in sheet_map]
 
     if not requested:
-        raise ValueError("No matching sheets found to import.")
+        if len(sheet_map) == 1:
+            only_key = next(iter(sheet_map))
+            sheet_map[DAILY_UPDATE_SHEET] = sheet_map[only_key]
+            requested = [DAILY_UPDATE_SHEET]
+        else:
+            raise ValueError("No matching sheets found to import.")
 
     _import_models()
     Base.metadata.create_all(bind=engine)

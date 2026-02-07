@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     EXCEL_DATASOURCE_DIR: str = "datasource"
     EXCEL_POLL_SECONDS: int = 10
     EXCEL_IMPORT_SHEETS: Optional[str] = None
+    EXCEL_DAILY_UPDATE_SHEET_ALIASES: Optional[str] = None
+    EXCEL_CREATE_MISSING_STORES: bool = False
 
     # ==============================
     # Security

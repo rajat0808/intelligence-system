@@ -2,6 +2,7 @@ import importlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from app.config import Settings, get_settings
 from app.database import Base, engine, ensure_sqlite_schema
 from app.services.excel_watch import ExcelWatchService, ensure_datasource_dir
@@ -55,4 +56,4 @@ app.include_router(whatsapp_router)
 
 @app.get("/")
 def root():
-    return {"status": "Inventory Intelligence API running"}
+    return RedirectResponse(url="/dashboard", status_code=302)

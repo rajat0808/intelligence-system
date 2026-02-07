@@ -1,9 +1,11 @@
+from datetime import date
+
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 from sqlalchemy import text
-from datetime import date
 from app.database import engine
-from app.intelligence.danger_rules import danger_level
+from app.intelligence.aging_rules import classify_status_with_default
+from app.intelligence.danger_rules import calculate_age_in_days, danger_level
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -14,7 +16,7 @@ _DASHBOARD_HTML = """
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SINDH Dashboard</title>
+    <title>SUPPLYSETU Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" cross origin>
     <link
@@ -23,20 +25,22 @@ _DASHBOARD_HTML = """
     >
     <style>
       :root {
-        --ink-900: #111111;
-        --ink-700: #2b2b2b;
-        --ink-500: #4a4a4a;
-        --sand-100: #ffffff;
-        --sand-200: #f4f4f4;
-        --mist-100: #ededed;
-        --mint-400: #1f1f1f;
-        --mint-600: #000000;
-        --coral-500: #2f2f2f;
-        --sun-400: #3a3a3a;
-        --steel-400: #5a5a5a;
+        --sage-400: #ACC82A;
+        --olive-900: #1A2517;
+        --ink-900: var(--olive-900);
+        --ink-700: rgba(26, 37, 23, 0.82);
+        --ink-500: rgba(26, 37, 23, 0.62);
+        --sand-100: #f9fbf2;
+        --sand-200: #f1f5e2;
+        --mist-100: #edf2dc;
+        --mint-400: var(--sage-400);
+        --mint-600: var(--olive-900);
+        --coral-500: var(--sage-400);
+        --sun-400: var(--sage-400);
+        --steel-400: rgba(26, 37, 23, 0.45);
         --white: #ffffff;
-        --shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
-        --shadow-soft: 0 12px 28px rgba(0, 0, 0, 0.1);
+        --shadow: 0 20px 45px rgba(26, 37, 23, 0.18);
+        --shadow-soft: 0 12px 28px rgba(26, 37, 23, 0.12);
         --radius-lg: 22px;
         --radius-md: 16px;
       }
@@ -51,8 +55,8 @@ _DASHBOARD_HTML = """
         font-family: "Sora", "Noto Sans", sans-serif;
         color: var(--ink-900);
         background:
-          radial-gradient(1100px 560px at 10% -10%, #f5f5f5 0, transparent 55%),
-          radial-gradient(900px 520px at 110% 10%, #e9e9e9 0, transparent 50%),
+          radial-gradient(1100px 560px at 10% -10%, #f6f9e6 0, transparent 55%),
+          radial-gradient(900px 520px at 110% 10%, #eef4d8 0, transparent 50%),
           linear-gradient(180deg, var(--sand-100) 0%, var(--mist-100) 100%);
         position: relative;
       }
@@ -62,8 +66,8 @@ _DASHBOARD_HTML = """
         position: fixed;
         inset: 0;
         background-image:
-          radial-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 0),
-          radial-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 0);
+          radial-gradient(rgba(26, 37, 23, 0.05) 1px, transparent 0),
+          radial-gradient(rgba(26, 37, 23, 0.04) 1px, transparent 0);
         background-size: 22px 22px, 28px 28px;
         background-position: 0 0, 7px 9px;
         pointer-events: none;
@@ -115,7 +119,7 @@ _DASHBOARD_HTML = """
 
       .chip {
         background: rgba(255, 255, 255, 0.8);
-        border: 1px solid rgba(46, 65, 60, 0.12);
+        border: 1px solid rgba(26, 37, 23, 0.18);
         padding: 10px 16px;
         border-radius: 999px;
         font-size: 13px;
@@ -127,8 +131,8 @@ _DASHBOARD_HTML = """
         border: none;
         padding: 12px 18px;
         border-radius: 999px;
-        background: var(--ink-900);
-        color: var(--white);
+        background: var(--sage-400);
+        color: var(--olive-900);
         font-weight: 600;
         cursor: pointer;
         box-shadow: var(--shadow-soft);
@@ -143,7 +147,7 @@ _DASHBOARD_HTML = """
       .button-outline {
         background: var(--white);
         color: var(--ink-900);
-        border: 1px solid rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(26, 37, 23, 0.24);
       }
 
       .grid {
@@ -158,7 +162,7 @@ _DASHBOARD_HTML = """
         border-radius: var(--radius-lg);
         padding: 20px 22px;
         box-shadow: var(--shadow);
-        border: 1px solid rgba(46, 65, 60, 0.08);
+        border: 1px solid rgba(26, 37, 23, 0.12);
         animation: floatUp 0.7s ease both;
         animation-delay: var(--delay, 0ms);
       }
@@ -192,7 +196,7 @@ _DASHBOARD_HTML = """
         border-radius: var(--radius-lg);
         padding: 18px 20px 6px;
         box-shadow: var(--shadow);
-        border: 1px solid rgba(46, 65, 60, 0.08);
+        border: 1px solid rgba(26, 37, 23, 0.12);
       }
 
       .panel header {
@@ -224,16 +228,16 @@ _DASHBOARD_HTML = """
         letter-spacing: 0.6px;
         text-transform: uppercase;
         color: var(--ink-500);
-        border-bottom: 1px solid rgba(46, 65, 60, 0.12);
+        border-bottom: 1px solid rgba(26, 37, 23, 0.2);
       }
 
       tbody td {
         padding: 12px 10px;
-        border-bottom: 1px solid rgba(46, 65, 60, 0.08);
+        border-bottom: 1px solid rgba(26, 37, 23, 0.12);
       }
 
       tbody tr:hover {
-        background: rgba(45, 138, 120, 0.06);
+        background: rgba(172, 200, 42, 0.12);
       }
 
       .store-id {
@@ -253,22 +257,47 @@ _DASHBOARD_HTML = """
       }
 
       .pill.early {
-        background: rgba(0, 0, 0, 0.08);
-        color: var(--ink-900);
+        background: rgba(172, 200, 42, 0.2);
+        color: var(--olive-900);
       }
 
       .pill.high {
-        background: rgba(0, 0, 0, 0.16);
-        color: var(--ink-900);
+        background: rgba(172, 200, 42, 0.35);
+        color: var(--olive-900);
       }
 
       .pill.critical {
-        background: rgba(0, 0, 0, 0.24);
-        color: var(--ink-900);
+        background: var(--olive-900);
+        color: var(--sand-100);
       }
 
       .pill.none {
-        background: rgba(0, 0, 0, 0.04);
+        background: rgba(26, 37, 23, 0.08);
+        color: var(--ink-700);
+      }
+
+      .pill.healthy {
+        background: rgba(172, 200, 42, 0.18);
+        color: var(--olive-900);
+      }
+
+      .pill.transfer {
+        background: rgba(172, 200, 42, 0.32);
+        color: var(--olive-900);
+      }
+
+      .pill.rr-tt {
+        background: rgba(26, 37, 23, 0.16);
+        color: var(--olive-900);
+      }
+
+      .pill.very-danger {
+        background: var(--olive-900);
+        color: var(--sand-100);
+      }
+
+      .pill.unknown {
+        background: rgba(26, 37, 23, 0.08);
         color: var(--ink-700);
       }
 
@@ -280,7 +309,7 @@ _DASHBOARD_HTML = """
       }
 
       .search-input {
-        border: 1px solid rgba(0, 0, 0, 0.18);
+        border: 1px solid rgba(26, 37, 23, 0.24);
         border-radius: 999px;
         padding: 10px 14px;
         font-size: 13px;
@@ -358,8 +387,8 @@ _DASHBOARD_HTML = """
     <div class="page">
       <header>
         <div class="title">
-          <div class="subtitle">SINDH</div>
-          <h1>SINDH Store Danger Dashboard</h1>
+          <div class="subtitle">SINDH FASHION</div>
+          <h1>SINDH FASHION</h1>
         </div>
         <div class="controls">
           <div class="chip" id="as-of">As of --</div>
@@ -414,6 +443,36 @@ _DASHBOARD_HTML = """
         <div class="panel">
           <header>
             <div>
+              <h3 class="panel-title">Aging Status Summary</h3>
+              <div class="panel-sub">Capital by aging status across all inventory.</div>
+            </div>
+            <div class="search">
+              <input class="search-input" id="aging-search-input" placeholder="Filter by store ID" />
+              <button class="button button-outline" id="aging-search-button">Filter</button>
+            </div>
+          </header>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>Healthy</th>
+                <th>Transfer</th>
+                <th>RR_TT</th>
+                <th>VERY_DANGER</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="aging-rows">
+              <tr><td class="empty" colspan="6">Loading data...</td></tr>
+            </tbody>
+          </table>
+          <div class="status" id="aging-status">Fetching latest data.</div>
+        </div>
+
+        <div class="panel">
+          <header>
+            <div>
               <h3 class="panel-title">Inventory Search</h3>
               <div class="panel-sub">Search by style code or article name.</div>
             </div>
@@ -428,13 +487,19 @@ _DASHBOARD_HTML = """
               <tr>
                 <th>Style</th>
                 <th>Article</th>
+                <th>Category</th>
+                <th>Department</th>
+                <th>Supplier</th>
                 <th>Store</th>
                 <th>Qty</th>
+                <th>Days</th>
+                <th>Item MRP</th>
+                <th>Aging</th>
                 <th>Danger</th>
               </tr>
             </thead>
             <tbody id="search-rows">
-              <tr><td class="empty" colspan="5">Enter a query to search inventory.</td></tr>
+              <tr><td class="empty" colspan="11">Enter a query to search inventory.</td></tr>
             </tbody>
           </table>
           <div class="status" id="search-status">Waiting for query.</div>
@@ -460,6 +525,8 @@ _DASHBOARD_HTML = """
         });
       };
 
+      let agingCache = [];
+
       const renderEmpty = (message) => {
         const tbody = document.getElementById("store-rows");
         tbody.innerHTML = `<tr><td class="empty" colspan="5">${message}</td></tr>`;
@@ -481,9 +548,58 @@ _DASHBOARD_HTML = """
         });
       };
 
+      const renderAgingEmpty = (message) => {
+        const tbody = document.getElementById("aging-rows");
+        tbody.innerHTML = `<tr><td class="empty" colspan="6">${message}</td></tr>`;
+      };
+
+      const renderAgingTable = (rows) => {
+        const tbody = document.getElementById("aging-rows");
+        tbody.innerHTML = "";
+        rows.forEach((row) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="store-id" data-label="Store">Store ${row.store_id}</td>
+            <td data-label="Healthy"><span class="pill healthy">HEALTHY</span>${formatCurrency.format(row.HEALTHY || 0)}</td>
+            <td data-label="Transfer"><span class="pill transfer">TRANSFER</span>${formatCurrency.format(row.TRANSFER || 0)}</td>
+            <td data-label="RR_TT"><span class="pill rr-tt">RR_TT</span>${formatCurrency.format(row.RR_TT || 0)}</td>
+            <td data-label="VERY_DANGER"><span class="pill very-danger">VERY_DANGER</span>${formatCurrency.format(row.VERY_DANGER || 0)}</td>
+            <td class="total" data-label="Total">${formatCurrency.format(row.total_aging_capital || 0)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      };
+
+      const applyAgingFilter = () => {
+        const input = document.getElementById("aging-search-input");
+        const status = document.getElementById("aging-status");
+        const query = input.value.trim().toLowerCase();
+
+        if (!agingCache || agingCache.length === 0) {
+          renderAgingEmpty("No inventory found.");
+          status.textContent = "No inventory found.";
+          return;
+        }
+
+        const filtered = query
+          ? agingCache.filter((row) => String(row.store_id).toLowerCase().includes(query))
+          : agingCache;
+
+        if (filtered.length === 0) {
+          renderAgingEmpty("No matches found.");
+          status.textContent = "No matching stores.";
+          return;
+        }
+
+        renderAgingTable(filtered);
+        status.textContent = query
+          ? `Showing ${filtered.length} stores for "${query}".`
+          : "Latest aging summary loaded.";
+      };
+
       const renderSearchEmpty = (message) => {
         const tbody = document.getElementById("search-rows");
-        tbody.innerHTML = `<tr><td class="empty" colspan="5">${message}</td></tr>`;
+        tbody.innerHTML = `<tr><td class="empty" colspan="11">${message}</td></tr>`;
       };
 
       const renderSearchTable = (rows) => {
@@ -492,12 +608,29 @@ _DASHBOARD_HTML = """
         rows.forEach((row) => {
           const level = row.danger_level || "NONE";
           const levelClass = level === "NONE" ? "none" : level.toLowerCase();
+          const aging = row.aging_status || "UNKNOWN";
+          const agingClass = aging === "UNKNOWN" ? "unknown" : aging.toLowerCase().replace(/_/g, "-");
+          const categoryName = row.category_name || row.category || "--";
+          const departmentName = row.department_name || "--";
+          const supplierName = row.supplier_name ? row.supplier_name : "--";
+          const ageDays = row.age_days == null ? "--" : row.age_days;
+          let itemMrp = row.item_mrp;
+          if (itemMrp == null) {
+            itemMrp = row.mrp;
+          }
+          const itemMrpLabel = itemMrp == null ? "--" : formatCurrency.format(itemMrp);
           const tr = document.createElement("tr");
           tr.innerHTML = `
             <td data-label="Style">${row.style_code}</td>
             <td data-label="Article">${row.article_name}</td>
+            <td data-label="Category">${categoryName}</td>
+            <td data-label="Department">${departmentName}</td>
+            <td data-label="Supplier">${supplierName}</td>
             <td data-label="Store">Store ${row.store_id}</td>
             <td data-label="Qty">${row.quantity}</td>
+            <td data-label="Days">${ageDays}</td>
+            <td data-label="Item MRP">${itemMrpLabel}</td>
+            <td data-label="Aging"><span class="pill ${agingClass}">${aging}</span></td>
             <td data-label="Danger"><span class="pill ${levelClass}">${level}</span></td>
           `;
           tbody.appendChild(tr);
@@ -522,7 +655,9 @@ _DASHBOARD_HTML = """
 
       const loadDashboard = async () => {
         const status = document.getElementById("status");
+        const agingStatus = document.getElementById("aging-status");
         status.textContent = "Refreshing data...";
+        agingStatus.textContent = "Refreshing data...";
         try {
           const response = await fetch("store-danger-summary");
           if (!response.ok) {
@@ -537,11 +672,18 @@ _DASHBOARD_HTML = """
             );
             renderTable(sorted);
           }
+
+          agingCache = [...(data.aging_results || [])].sort(
+            (a, b) => b.total_aging_capital - a.total_aging_capital
+          );
+          applyAgingFilter();
           updateSummary(data);
           status.textContent = "Latest data loaded.";
         } catch (error) {
           renderEmpty("Unable to load data. Check the API and try again.");
           status.textContent = `Error: ${error.message}`;
+          renderAgingEmpty("Unable to load data. Check the API and try again.");
+          agingStatus.textContent = `Error: ${error.message}`;
         }
       };
 
@@ -576,7 +718,13 @@ _DASHBOARD_HTML = """
       };
 
       document.getElementById("refresh").addEventListener("click", loadDashboard);
+      document.getElementById("aging-search-button").addEventListener("click", applyAgingFilter);
       document.getElementById("search-button").addEventListener("click", searchInventory);
+      document.getElementById("aging-search-input").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          applyAgingFilter();
+        }
+      });
       document.getElementById("search-input").addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
           searchInventory();
@@ -598,50 +746,72 @@ def dashboard_page():
 def store_wise_danger_summary():
     """
     Store-wise capital summary for ALERT-VISIBLE inventory only
-    (EARLY / HIGH / CRITICAL)
+    (EARLY / HIGH / CRITICAL), plus aging status across all inventory.
     """
 
+    # noinspection SqlNoDataSourceInspection
     sql = text("""
         SELECT
             i.store_id,
             i.quantity,
             i.cost_price,
-            i.lifecycle_start_date
+            i.lifecycle_start_date,
+            p.category
         FROM inventory i
+        LEFT JOIN products p ON p.id = i.product_id
     """)
 
     today = date.today()
-    summary = {}
+    danger_summary = {}
+    aging_summary = {}
 
     with engine.connect() as conn:
         rows = conn.execute(sql).mappings().all()
 
     for row in rows:
+        store_id = row["store_id"]
+        capital = row["quantity"] * row["cost_price"]
         level = danger_level(row["lifecycle_start_date"])
 
         # =========================
         # ONLY ALERT-VISIBLE ITEMS
         # =========================
-        if level is None:
+        if level is not None:
+            if store_id not in danger_summary:
+                danger_summary[store_id] = {
+                    "store_id": store_id,
+                    "EARLY": 0.0,
+                    "HIGH": 0.0,
+                    "CRITICAL": 0.0,
+                    "total_danger_capital": 0.0,
+                }
+
+            danger_summary[store_id][level] += capital
+            danger_summary[store_id]["total_danger_capital"] += capital
+
+        age_days = calculate_age_in_days(row["lifecycle_start_date"])
+        if age_days is None:
             continue
 
-        store_id = row["store_id"]
-        capital = row["quantity"] * row["cost_price"]
+        # Aging status uses category rules with default thresholds for unknown categories.
+        aging_status = classify_status_with_default(row["category"], age_days)
 
-        if store_id not in summary:
-            summary[store_id] = {
+        if store_id not in aging_summary:
+            aging_summary[store_id] = {
                 "store_id": store_id,
-                "EARLY": 0.0,
-                "HIGH": 0.0,
-                "CRITICAL": 0.0,
-                "total_danger_capital": 0.0,
+                "HEALTHY": 0.0,
+                "TRANSFER": 0.0,
+                "RR_TT": 0.0,
+                "VERY_DANGER": 0.0,
+                "total_aging_capital": 0.0,
             }
 
-        summary[store_id][level] += capital
-        summary[store_id]["total_danger_capital"] += capital
+        aging_summary[store_id][aging_status] += capital
+        aging_summary[store_id]["total_aging_capital"] += capital
 
     return {
         "date": today,
-        "store_count": len(summary),
-        "results": list(summary.values()),
+        "store_count": len(danger_summary),
+        "results": list(danger_summary.values()),
+        "aging_results": list(aging_summary.values()),
     }

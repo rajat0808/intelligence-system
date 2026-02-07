@@ -20,6 +20,11 @@ class DangerRulesTest(unittest.TestCase):
                 start_date = today - timedelta(days=days)
                 self.assertEqual(danger_level(start_date), expected)
 
+    def test_accepts_iso_date_string(self):
+        today = date.today()
+        start_date = (today - timedelta(days=180)).isoformat()
+        self.assertEqual(danger_level(start_date), "EARLY")
+
 
 if __name__ == "__main__":
     unittest.main()

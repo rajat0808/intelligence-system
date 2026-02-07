@@ -40,6 +40,7 @@ _SQLITE_COLUMN_DEFAULTS = {
     "products": {
         "supplier_name": "TEXT NOT NULL DEFAULT ''",
         "mrp": "REAL NOT NULL DEFAULT 0",
+        "department_name": "TEXT NOT NULL DEFAULT ''",
     },
     "inventory": {
         "current_price": "REAL NOT NULL DEFAULT 0",

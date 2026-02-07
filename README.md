@@ -83,8 +83,9 @@ The FastAPI app watches `datasource/` and auto-imports any new or updated `.xlsx
 - The folder is created automatically if it does not exist.
 
 Sheets (case-insensitive):
+- `daily_update`: `store_id`, `supplier_name`, `stock_days`, `style_code`, `department_name`, `category_name`, `item_mrp`
 - `stores`: `id` (optional), `name`, `city`
-- `products`: `id` (optional), `store_id`, `style_code`, `barcode`, `article_name`, `category`, `supplier_name`, `mrp`
+- `products`: `id` (optional), `store_id`, `style_code`, `barcode`, `article_name`, `category`, `department_name` (optional), `supplier_name`, `mrp`
 - `inventory`: `id` (optional), `store_id`, `product_id`, `quantity`, `cost_price`, `current_price`, `lifecycle_start_date` (YYYY-MM-DD)
 
 Template:
@@ -95,6 +96,8 @@ Config (see `config.py`):
 - `EXCEL_DATASOURCE_DIR` (default: `datasource`)
 - `EXCEL_POLL_SECONDS` (default: `10`)
 - `EXCEL_IMPORT_SHEETS` (optional, comma-separated)
+- `EXCEL_DAILY_UPDATE_SHEET_ALIASES` (optional, comma-separated)
+- `EXCEL_CREATE_MISSING_STORES` (default: `false`)
 
 Manual run (optional):
 ```powershell

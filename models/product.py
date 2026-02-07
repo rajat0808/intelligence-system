@@ -15,6 +15,7 @@ class Product(Base):
     # Product details
     article_name = Column(String, nullable=False)
     category = Column(String, nullable=False)
+    department_name = Column(String, nullable=False, default="")
 
     # NEW FIELDS
     supplier_name = Column(String, nullable=False)

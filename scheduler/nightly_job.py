@@ -1,26 +1,17 @@
-﻿import json
-import importlib
+import json
 from datetime import date
 from pathlib import Path
 import sys
 
 from sqlalchemy import text
 
+_repo_root = Path(__file__).resolve().parents[1]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
 
-def _ensure_app_package():
-    try:
-        import app  # noqa: F401
-        return
-    except ModuleNotFoundError:
-        # Allow running when the repo directory is not named "app".
-        repo_root = Path(__file__).resolve().parents[1]
-        parent_dir = repo_root.parent
-        if str(parent_dir) not in sys.path:
-            sys.path.insert(0, str(parent_dir))
-        sys.modules["app"] = importlib.import_module(repo_root.name)
+from bootstrap import ensure_app_package
 
-
-_ensure_app_package()
+ensure_app_package()
 
 from app.database import SessionLocal
 from app.config import get_settings
@@ -48,6 +39,7 @@ def nightly_run():
     db = SessionLocal()
     today = date.today()
 
+    # noinspection SqlNoDataSourceInspection
     inventories = db.execute(text("""
         SELECT i.*, p.category, p.mrp
         FROM inventory i

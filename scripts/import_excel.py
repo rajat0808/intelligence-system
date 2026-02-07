@@ -1,24 +1,17 @@
 import argparse
-import importlib
 import sys
 from pathlib import Path
 
 from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.exc import SQLAlchemyError
 
-def _ensure_app_package():
-    try:
-        import app  # noqa: F401
-        return
-    except ModuleNotFoundError:
-        repo_root = Path(__file__).resolve().parents[1]
-        parent_dir = repo_root.parent
-        if str(parent_dir) not in sys.path:
-            sys.path.insert(0, str(parent_dir))
-        sys.modules["app"] = importlib.import_module(repo_root.name)
+_repo_root = Path(__file__).resolve().parents[1]
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
 
+from bootstrap import ensure_app_package
 
-_ensure_app_package()
+ensure_app_package()
 
 from app.services.excel_importer import import_workbook
 

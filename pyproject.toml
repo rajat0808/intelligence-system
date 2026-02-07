@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-py-modules = ["main", "config", "database"]
+py-modules = ["main", "config", "database", "bootstrap"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Query, HTTPException
 from sqlalchemy import text
-from datetime import date
 from app.database import engine
-from app.intelligence.danger_rules import danger_level
+from app.intelligence.aging_rules import classify_status_with_default
+from app.intelligence.danger_rules import calculate_age_in_days, danger_level
 
 router = APIRouter(prefix="/search", tags=["Search"])
 
@@ -31,11 +31,13 @@ def search_inventory(
 
     alert_only = str(alert_only).strip().lower() in ("1", "true", "yes", "y")
 
+    # noinspection SqlNoDataSourceInspection
     sql = text("""
         SELECT
             p.style_code,
             p.article_name,
             p.category,
+            p.department_name,
             p.supplier_name,
             p.mrp,
             i.store_id,
@@ -65,23 +67,37 @@ def search_inventory(
             }
         ).mappings().all()
 
-    today = date.today()
     results = []
 
     for row in rows:
         item = dict(row)
+        item["category_name"] = item.get("category")
 
         # =========================
         # STOCK AGE (DAYS)
         # =========================
-        age_days = (today - item["lifecycle_start_date"]).days
+        age_days = calculate_age_in_days(item["lifecycle_start_date"])
         item["age_days"] = age_days
+        item["stock_days"] = age_days
+        item["days"] = age_days
+
+        # =========================
+        # AGING STATUS (RULE-BASED)
+        # =========================
+        if age_days is None:
+            item["aging_status"] = None
+        else:
+            # Unknown categories use the default aging thresholds.
+            item["aging_status"] = classify_status_with_default(item["category"], age_days)
 
         # =========================
         # DANGER LEVEL (DERIVED)
         # =========================
         level = danger_level(item["lifecycle_start_date"])
         item["danger_level"] = level
+        mrp_value = item.get("mrp")
+        item["item_mrp"] = mrp_value
+        item["item_price"] = mrp_value
 
         # =========================
         # ALERT-VISIBLE FILTER
