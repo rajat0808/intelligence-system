@@ -52,6 +52,14 @@ Required for WhatsApp alerts:
 - `FOUNDER_PHONE`
 - `CO_FOUNDER_PHONE`
 
+WhatsApp Cloud API example:
+```text
+WHATSAPP_API_URL=https://graph.facebook.com/v19.0/<PHONE_NUMBER_ID>/messages
+WHATSAPP_ACCESS_TOKEN=<ACCESS_TOKEN>
+FOUNDER_PHONE=15551234567
+CO_FOUNDER_PHONE=15551234568
+```
+
 Optional defaults (see `config.py`):
 - `DATABASE_URL` (default: `sqlite:///./inventory.db`)
 - `ML_ALERT_THRESHOLD` (default: `0.75`)
@@ -62,8 +70,9 @@ Optional defaults (see `config.py`):
 - `GET /dashboard/` - dashboard UI
 - `GET /dashboard/store-danger-summary` - store-wise danger capital summary
 - `GET /search/inventory` - search inventory
-  - query params: `query`, `store_id`, `danger` (EARLY|HIGH|CRITICAL), `alert_only`
-- `POST /whatsapp/send` - stub endpoint (echoes message)
+  - query params: `query`, `department` (comma-separated), `store_id`, `danger` (EARLY|HIGH|CRITICAL), `alert_only`
+- `POST /whatsapp/send` - send a WhatsApp message; body: `{"message":"...","phone":"15551234567"}`
+- `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"cost_price":4500,"lifecycle_start_date":"2025-01-01"}`
 
 ## Database notes
 The API expects these tables to be populated:

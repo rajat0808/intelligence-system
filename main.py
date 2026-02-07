@@ -10,6 +10,7 @@ from app.services.excel_watch import ExcelWatchService, ensure_datasource_dir
 from app.api.dashboard import router as dashboard_router
 from app.api.search import router as search_router
 from app.api.whatsapp import router as whatsapp_router
+from app.api.ml import router as ml_router
 
 
 def _import_models():
@@ -52,6 +53,7 @@ app = FastAPI(title="Inventory Intelligence Platform", lifespan=lifespan)
 app.include_router(dashboard_router)
 app.include_router(search_router)
 app.include_router(whatsapp_router)
+app.include_router(ml_router)
 
 
 @app.get("/")

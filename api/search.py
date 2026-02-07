@@ -10,6 +10,7 @@ router = APIRouter(prefix="/search", tags=["Search"])
 @router.get("/inventory")
 def search_inventory(
     query=Query(None, description="Style code or article name"),
+    department=Query(None, description="Filter by department name (comma-separated)"),
     store_id=Query(None, description="Filter by store ID"),
     danger=Query(
         None,
@@ -20,8 +21,25 @@ def search_inventory(
         description="Show only items that are in danger (alert-visible)"
     ),
 ):
-    if query is None or len(query) < 2:
-        raise HTTPException(status_code=400, detail="Query must be at least 2 characters.")
+    if query is not None:
+        query = str(query).strip()
+        if not query:
+            query = None
+        elif len(query) < 2:
+            raise HTTPException(status_code=400, detail="Query must be at least 2 characters.")
+
+    departments = []
+    if department:
+        for entry in str(department).split(","):
+            entry = entry.strip()
+            if entry:
+                departments.append(entry)
+
+    if not query and not departments:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide a search query or department filter."
+        )
 
     if store_id is not None:
         try:
@@ -30,6 +48,20 @@ def search_inventory(
             raise HTTPException(status_code=400, detail="store_id must be an integer.")
 
     alert_only = str(alert_only).strip().lower() in ("1", "true", "yes", "y")
+
+    department_clause = ""
+    params = {
+        "q": "%{}%".format(query) if query else None,
+        "store_id": store_id,
+    }
+
+    if departments:
+        department_filters = []
+        for idx, entry in enumerate(departments):
+            key = "dept_{}".format(idx)
+            department_filters.append("LOWER(p.department_name) = :{}".format(key))
+            params[key] = entry.lower()
+        department_clause = "AND ({})".format(" OR ".join(department_filters))
 
     # noinspection SqlNoDataSourceInspection
     sql = text("""
@@ -49,22 +81,21 @@ def search_inventory(
         JOIN products p ON p.id = i.product_id
         WHERE
             (
-                LOWER(p.style_code) LIKE LOWER(:q)
+                :q IS NULL
+                OR LOWER(p.style_code) LIKE LOWER(:q)
                 OR LOWER(p.article_name) LIKE LOWER(:q)
             )
             AND (:store_id IS NULL OR i.store_id = :store_id)
+            {department_clause}
         ORDER BY
             p.article_name,
             i.store_id
-    """)
+    """.format(department_clause=department_clause))
 
     with engine.connect() as conn:
         rows = conn.execute(
             sql,
-            {
-                "q": "%{}%".format(query),
-                "store_id": store_id
-            }
+            params
         ).mappings().all()
 
     results = []
