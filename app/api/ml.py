@@ -1,3 +1,3 @@
-from api.ml import router, predict
+from api.ml import router, predict, inventory_risk
 
-__all__ = ["router", "predict"]
+__all__ = ["router", "predict", "inventory_risk"]

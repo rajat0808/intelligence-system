@@ -11,6 +11,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.search import router as search_router
 from app.api.whatsapp import router as whatsapp_router
 from app.api.ml import router as ml_router
+from app.api.alerts import router as alerts_router
 
 
 def _import_models():
@@ -54,6 +55,7 @@ app.include_router(dashboard_router)
 app.include_router(search_router)
 app.include_router(whatsapp_router)
 app.include_router(ml_router)
+app.include_router(alerts_router)
 
 
 @app.get("/")

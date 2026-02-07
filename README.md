@@ -73,6 +73,8 @@ Optional defaults (see `config.py`):
   - query params: `query`, `department` (comma-separated), `store_id`, `danger` (EARLY|HIGH|CRITICAL), `alert_only`
 - `POST /whatsapp/send` - send a WhatsApp message; body: `{"message":"...","phone":"15551234567"}`
 - `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"cost_price":4500,"lifecycle_start_date":"2025-01-01"}`
+- `GET /ml/inventory` - ML risk scores from datasource (filters: `store_id`, `product_id`, `category`, `min_risk`, `limit`)
+- `POST /alerts/run` - run alert workflow using datasource (sends WhatsApp alerts)
 
 ## Database notes
 The API expects these tables to be populated:
