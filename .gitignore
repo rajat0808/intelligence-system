@@ -10,6 +10,8 @@ __pycache__/
 venv/
 
 *.db
+*.db-shm
+*.db-wal
 
 .idea/
 .pytest_cache/
@@ -23,3 +25,6 @@ htmlcov/
 
 datasource/*.xlsx
 !datasource/daily_update_template.xlsx
+
+ml/artifacts/
+app/ml/artifacts/

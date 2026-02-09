@@ -1,7 +1,7 @@
 import unittest
 from datetime import date, timedelta
 
-from intelligence.danger_rules import danger_level
+from app.core.danger_rules import danger_level
 
 
 class DangerRulesTest(unittest.TestCase):

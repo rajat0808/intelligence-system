@@ -5,3 +5,11 @@ include requirements.txt
 include datasource/daily_update_template.xlsx
 include scripts/import_excel.py
 include scripts/run_excel_import.ps1
+include scripts/seed_data.py
+include scripts/run_scheduler.py
+include scripts/retrain_model.py
+include run.sh
+recursive-include app/templates *.html
+recursive-include app/static *.css
+recursive-include app/static *.js
+recursive-include docker *

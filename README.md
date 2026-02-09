@@ -5,18 +5,25 @@ FastAPI service for tracking inventory risk, surfacing danger alerts, and sendin
 ## Features
 - Store danger dashboard with capital at risk by store
 - Search API with danger filters and alert-only views
-- Nightly job that records daily snapshots and triggers alerts
+- Daily scheduler that records snapshots and triggers alerts
 - WhatsApp alert integration (configurable)
 - SQLite by default, SQLAlchemy models throughout
 
 ## Project layout
-- `main.py` - FastAPI app and route wiring
-- `api/` - HTTP routes (dashboard, search, whatsapp)
-- `intelligence/` - rule logic and decision engine
-- `ml/` - heuristic risk scoring
-- `models/` - SQLAlchemy models
-- `scheduler/` - nightly job runner
-- `services/` - alerting and integrations
+- `app/` - FastAPI application package
+  - `main.py` - entrypoint and startup wiring
+  - `core/` - logging, scheduler, security, constants
+  - `database/` - engine, session, base
+  - `models/` - SQLAlchemy models
+  - `schemas/` - Pydantic request/response models
+  - `routers/` - API routes (health, ingest, dashboard, search, ml, alerts, whatsapp)
+  - `services/` - ingestion, ML, alerts, dashboard aggregation
+  - `ml/` - feature engineering, training, evaluation
+  - `templates/` - HTML templates
+  - `static/` - CSS assets
+- `scripts/` - seed data, scheduler runner, model retraining, excel import
+- `tests/` - unit tests
+- `docker/` - Dockerfile and compose
 
 ## Quick start (Windows PowerShell)
 ```powershell
@@ -29,12 +36,17 @@ uvicorn app.main:app --reload
 ```
 
 Then open:
-- `http://localhost:8000/` for health
+- `http://localhost:8000/health` for health
 - `http://localhost:8000/dashboard/` for the dashboard
 
 ## Testing
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
+```
+
+## Docker
+```powershell
+docker compose -f docker/docker-compose.yml up --build
 ```
 
 ## Packaging (optional)
@@ -60,27 +72,36 @@ FOUNDER_PHONE=15551234567
 CO_FOUNDER_PHONE=15551234568
 ```
 
-Optional defaults (see `config.py`):
+Optional defaults (see `app/config.py`):
 - `DATABASE_URL` (default: `sqlite:///./inventory.db`)
 - `ML_ALERT_THRESHOLD` (default: `0.75`)
 - `ENVIRONMENT`, `APP_NAME`, `FOUNDER_API_KEY`
+- Dashboard login:
+  - `DASHBOARD_USERNAME`
+  - `DASHBOARD_PASSWORD` (plaintext) or `DASHBOARD_PASSWORD_HASH` + `DASHBOARD_PASSWORD_SALT`
+  - `DASHBOARD_SESSION_SECRET`
+- Scheduler: `SCHEDULER_ENABLED`, `SCHEDULER_RUN_AFTER`, `SCHEDULER_POLL_SECONDS`,
+`SCHEDULER_HEARTBEAT_SECONDS`, `SCHEDULER_STALE_SECONDS`, `SCHEDULER_RETRY_SECONDS`,
+`SCHEDULER_MAX_RETRIES`, `SCHEDULER_TZ`
 
 ## API endpoints
-- `GET /` - service status
+- `GET /health` - service status
 - `GET /dashboard/` - dashboard UI
 - `GET /dashboard/store-danger-summary` - store-wise danger capital summary
 - `GET /search/inventory` - search inventory
   - query params: `query`, `department` (comma-separated), `store_id`, `danger` (EARLY|HIGH|CRITICAL), `alert_only`
+- `POST /ingest/excel` - trigger Excel import; body: `{"path":"datasource/daily_update.xlsx","sheets":["daily_update"],"dry_run":false}`
 - `POST /whatsapp/send` - send a WhatsApp message; body: `{"message":"...","phone":"15551234567"}`
-- `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"cost_price":4500,"lifecycle_start_date":"2025-01-01"}`
+- `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"item_mrp":4500,"lifecycle_start_date":"2025-01-01"}`
 - `GET /ml/inventory` - ML risk scores from datasource (filters: `store_id`, `product_id`, `category`, `min_risk`, `limit`)
-- `POST /alerts/run` - run alert workflow using datasource (sends WhatsApp alerts)
+- `POST /alerts/run` - run alert workflow using datasource (query: `send_notifications=true|false`)
 
 ## Database notes
 The API expects these tables to be populated:
 - `stores`
 - `products`
 - `inventory`
+- `job_logs` (scheduler state and crash recovery)
 
 The dashboard uses `inventory` only. Search uses `products` + `inventory`.
 Running the app creates tables automatically via `Base.metadata.create_all`, but you must insert data yourself.
@@ -97,12 +118,12 @@ Sheets (case-insensitive):
 - `daily_update`: `store_id`, `supplier_name`, `stock_days`, `style_code`, `department_name`, `category_name`, `item_mrp`
 - `stores`: `id` (optional), `name`, `city`
 - `products`: `id` (optional), `store_id`, `style_code`, `barcode`, `article_name`, `category`, `department_name` (optional), `supplier_name`, `mrp`
-- `inventory`: `id` (optional), `store_id`, `product_id`, `quantity`, `cost_price`, `current_price`, `lifecycle_start_date` (YYYY-MM-DD)
+- `inventory`: `id` (optional), `store_id`, `product_id`, `quantity`, `item_mrp`, `current_price`, `lifecycle_start_date` (YYYY-MM-DD)
 
 Template:
 - Copy `datasource/daily_update_template.xlsx` to `datasource/daily_update.xlsx` and fill it daily.
 
-Config (see `config.py`):
+Config (see `app/config.py`):
 - `EXCEL_AUTO_IMPORT` (default: `true`)
 - `EXCEL_DATASOURCE_DIR` (default: `datasource`)
 - `EXCEL_POLL_SECONDS` (default: `10`)
@@ -115,14 +136,45 @@ Manual run (optional):
 python scripts/import_excel.py --path .\datasource\daily_update.xlsx
 ```
 
-## Nightly job
-`scheduler/nightly_job.py` computes:
+Seed sample data (optional):
+```powershell
+python scripts/seed_data.py
+```
+
+## Daily scheduler
+The scheduler runs as a standalone process (separate from FastAPI) and persists state in `job_logs`:
+```powershell
+python scripts/run_scheduler.py
+```
+
+Crash recovery: the scheduler records each run in `job_logs`, updates heartbeats while running, and retries
+stale or failed runs with backoff while preventing duplicate executions.
+
+The job runs once per day after `SCHEDULER_RUN_AFTER` and computes:
 - aging status
 - rule-based danger level
 - decision engine output
 - ML risk score
 
-It writes a row to `daily_snapshots` and sends WhatsApp alerts for HIGH/CRITICAL or high ML risk, recording delivery logs in `delivery_logs`.
+It writes to `daily_snapshots`, logs ML output in `risk_logs`, and records alert delivery in `alerts`.
 
-## ML risk scoring (heuristic)
-The model in `ml/predict.py` is a lightweight heuristic that returns a 0..1 score based on age, stock value, and category. It is a placeholder you can replace with a trained model.
+## ML risk scoring (trained)
+`app/ml/predict.py` uses a trained classifier when a model file is present, falling back to the heuristic only if no model is available.
+
+Training sources:
+- `daily_snapshots` + `sales` (preferred): labels items that sell within a future horizon.
+- `inventory` + recent `sales` (fallback): labels items sold in the last horizon window.
+
+Train and export a model:
+```powershell
+python -m app.ml.train --horizon-days 30
+# or: python scripts/retrain_model.py --horizon-days 30
+```
+
+This writes:
+- `app/ml/artifacts/inventory_risk_model.joblib` (model)
+- `app/ml/artifacts/inventory_risk_metadata.json` (metrics and training metadata)
+
+Override paths with:
+- `ML_MODEL_PATH`
+- `ML_MODEL_METADATA_PATH`

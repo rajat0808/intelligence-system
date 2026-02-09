@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sindh Fashion Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar glass">
+        <div>
+          <div class="brand">
+            <img class="logo-image" src="/static/sindh-logo.png" alt="Sindh Fashion logo" />
+            <div class="brand-text">Sindh Fashion</div>
+          </div>
+          <nav class="nav" aria-label="Primary">
+            <button class="nav-icon active" type="button" aria-label="Dashboard">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M3 11l9-7 9 7"></path>
+                <path d="M5 10v10h14V10"></path>
+              </svg>
+            </button>
+            <button class="nav-icon" type="button" aria-label="Search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="M20 20l-3.5-3.5"></path>
+              </svg>
+            </button>
+            <button class="nav-icon" type="button" aria-label="Alerts">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                <path d="M12 3l7 4v6c0 4.4-3 7.6-7 8-4-0.4-7-3.6-7-8V7l7-4z"></path>
+              </svg>
+            </button>
+          </nav>
+        </div>
+        <div class="sidebar-footer">
+          <span class="live-dot"></span>
+          <span id="live-status">Live feed</span>
+        </div>
+      </aside>
+
+      <main class="page">
+        <header>
+          <div class="title">
+            <div class="subtitle">Sindh Fashion Inventory</div>
+            <h1>Store Health Dashboard</h1>
+            <div class="subtitle tagline">Capital status and aging mix across stores.</div>
+          </div>
+          <div class="controls">
+            <div class="chip tag">Stores: <span id="store-count">--</span></div>
+            <div class="chip tag">Last updated: <span id="last-updated">--</span></div>
+            <button class="chip live-chip" id="live-toggle" type="button">
+              <span class="live-dot"></span>
+              Live sync
+            </button>
+            {% if auth_enabled %}
+              <form class="logout-form" method="post" action="/logout">
+                <button class="chip" type="submit">Logout</button>
+              </form>
+            {% endif %}
+          </div>
+        </header>
+
+        <section class="action-dock">
+          <button class="action-pill" data-accent="blue" id="refresh-btn" type="button">
+            <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M21 12a9 9 0 1 1-3.2-6.8"></path>
+              <path d="M21 3v6h-6"></path>
+            </svg>
+            <div class="action-text">
+              <span class="action-title">Refresh data</span>
+              <span class="action-sub">Pull latest store summary</span>
+            </div>
+          </button>
+          <button class="action-pill" data-accent="violet" id="export-btn" type="button">
+            <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M12 3v12"></path>
+              <path d="M7 10l5 5 5-5"></path>
+              <path d="M4 21h16"></path>
+            </svg>
+            <div class="action-text">
+              <span class="action-title">Export CSV</span>
+              <span class="action-sub">Filtered store results</span>
+            </div>
+          </button>
+          <button class="action-pill" data-accent="ice" id="reset-btn" type="button">
+            <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M3 6h18"></path>
+              <path d="M8 6V4h8v2"></path>
+              <path d="M6 6l1 14h10l1-14"></path>
+            </svg>
+            <div class="action-text">
+              <span class="action-title">Clear filters</span>
+              <span class="action-sub">Reset search + tags</span>
+            </div>
+          </button>
+        </section>
+
+        <section class="grid">
+          <div class="card" style="--delay: 0ms;">
+            <h2>Healthy capital</h2>
+            <div class="value" id="healthy-capital">--</div>
+            <div class="note">Capital tagged healthy.</div>
+          </div>
+          <div class="card" style="--delay: 80ms;">
+            <h2>Transfer capital</h2>
+            <div class="value" id="transfer-capital">--</div>
+            <div class="note">Items moving across stores.</div>
+          </div>
+          <div class="card" style="--delay: 160ms;">
+            <h2>Rate revised capital</h2>
+            <div class="value" id="rate-revised-capital">--</div>
+            <div class="note">Revised-rate tagged items.</div>
+          </div>
+          <div class="card" style="--delay: 240ms;">
+            <h2>Very danger capital</h2>
+            <div class="value" id="very-danger-capital">--</div>
+            <div class="note">High priority status.</div>
+          </div>
+        </section>
+
+        <section class="analytics-grid">
+          <div class="panel">
+            <header class="panel-head">
+              <div>
+                <h2 class="panel-title">Status distribution</h2>
+                <div class="panel-sub">Capital split based on the latest inventory snapshot.</div>
+              </div>
+              <div class="panel-actions">
+                <button class="chip toggle active" id="analytics-live" type="button">Live</button>
+                <button class="chip toggle disabled" id="analytics-predictive" type="button" disabled>Predictive</button>
+              </div>
+            </header>
+            <div class="chart-area" id="status-chart" role="img" aria-label="Status capital distribution chart"></div>
+            <div class="trend-grid">
+              <div class="trend-card">
+                <div class="trend-label" id="trend-healthy-label">Healthy capital</div>
+                <div class="trend-value" id="trend-healthy">--</div>
+              </div>
+              <div class="trend-card">
+                <div class="trend-label" id="trend-transfer-label">Transfer capital</div>
+                <div class="trend-value" id="trend-transfer">--</div>
+              </div>
+              <div class="trend-card">
+                <div class="trend-label" id="trend-rate-revised-label">Rate revised capital</div>
+                <div class="trend-value" id="trend-rate-revised">--</div>
+              </div>
+              <div class="trend-card">
+                <div class="trend-label" id="trend-very-danger-label">Very danger capital</div>
+                <div class="trend-value alert" id="trend-very-danger">--</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel system-health-panel">
+            <header>
+              <h2 class="panel-title">System Health</h2>
+              <div class="panel-sub">Live signals across pipeline and automation.</div>
+            </header>
+            <div class="system-health">
+              <div class="system-item">
+                <div class="health-row">
+                  <span>API latency</span>
+                  <span class="health-value" id="health-latency">--</span>
+                </div>
+                <div class="health-bar"><span id="health-latency-bar"></span></div>
+              </div>
+              <div class="system-row">
+                <span>API status</span>
+                <span class="system-value" id="health-api-status">--</span>
+              </div>
+              <div class="system-row">
+                <span>Ingestion pipeline</span>
+                <span class="system-value" id="health-ingestion">--</span>
+              </div>
+              <div class="system-row">
+                <span>Automation queue</span>
+                <span class="system-value" id="health-automation">--</span>
+              </div>
+              <div class="system-row">
+                <span>Workflow engine</span>
+                <span class="system-value" id="health-workflow">--</span>
+              </div>
+              <div class="system-row">
+                <span>Alert pipeline</span>
+                <span class="system-value" id="health-alert">--</span>
+              </div>
+            </div>
+            <div class="system-meta">
+              <div class="system-meta-row">
+                <span>App</span>
+                <span id="health-app">--</span>
+              </div>
+              <div class="system-meta-row">
+                <span>Env</span>
+                <span id="health-environment">--</span>
+              </div>
+              <div class="system-meta-row">
+                <span>Server time</span>
+                <span id="health-time">--</span>
+              </div>
+            </div>
+            <div class="status" id="system-health-status">Waiting for health check...</div>
+          </div>
+        </section>
+
+        <section class="panel" id="aging-panel">
+          <header>
+            <h2 class="panel-title">Status mix</h2>
+            <div class="panel-sub">Capital split by status classification.</div>
+          </header>
+          <div class="health-grid">
+            <div class="health-item" data-aging="HEALTHY">
+              <div class="health-row">
+                <span>Healthy</span>
+                <span class="health-value" id="aging-healthy">--</span>
+              </div>
+              <div class="health-bar"><span></span></div>
+            </div>
+            <div class="health-item" data-aging="TRANSFER">
+              <div class="health-row">
+                <span>Transfer</span>
+                <span class="health-value" id="aging-transfer">--</span>
+              </div>
+              <div class="health-bar"><span></span></div>
+            </div>
+            <div class="health-item" data-aging="RR_TT">
+              <div class="health-row">
+                <span>Rate revised</span>
+                <span class="health-value" id="aging-rate-revised">--</span>
+              </div>
+              <div class="health-bar"><span></span></div>
+            </div>
+            <div class="health-item" data-aging="VERY_DANGER">
+              <div class="health-row">
+                <span>Very danger</span>
+                <span class="health-value" id="aging-very-danger">--</span>
+              </div>
+              <div class="health-bar"><span></span></div>
+            </div>
+          </div>
+          <div class="health-insights" id="health-insights"></div>
+        </section>
+
+        <section class="panel search-panel" id="filters-panel">
+          <header>
+            <h2 class="panel-title">Filters and search</h2>
+            <div class="panel-sub">Refine the stores you are monitoring.</div>
+          </header>
+          <div class="search">
+            <input
+              class="search-input"
+              id="search-input"
+              type="search"
+              placeholder="Search by store id"
+              autocomplete="off"
+            />
+            <div class="search-block">
+              <div class="filter-row">
+                <span class="filter-label">Status</span>
+                <div class="chip-row">
+                  <button class="chip toggle" data-filter-group="aging" data-filter="HEALTHY" type="button">Healthy</button>
+                  <button class="chip toggle" data-filter-group="aging" data-filter="TRANSFER" type="button">Transfer</button>
+                  <button class="chip toggle" data-filter-group="aging" data-filter="RR_TT" type="button">
+                    Rate revised
+                  </button>
+                  <button class="chip toggle" data-filter-group="aging" data-filter="VERY_DANGER" type="button">
+                    Very danger
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="status" id="filter-status">Waiting for data...</div>
+        </section>
+
+        <section class="panel search-panel" id="table-panel">
+          <header>
+            <h2 class="panel-title">Store status breakdown</h2>
+            <div class="panel-sub">Capital status by store.</div>
+          </header>
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>Total capital</th>
+                <th>Status mix</th>
+              </tr>
+            </thead>
+            <tbody id="store-table-body"></tbody>
+          </table>
+          <div class="empty" id="empty-state" hidden>No matching stores.</div>
+          <div class="status" id="table-status">Waiting for data...</div>
+        </section>
+
+        <section class="panel inventory-panel" id="inventory-panel">
+          <header>
+            <h2 class="panel-title">Inventory Search</h2>
+            <div class="panel-sub">Search by style code or article name.</div>
+          </header>
+          <div class="inventory-search">
+            <div class="inventory-fields">
+              <input
+                class="search-input"
+                id="inventory-query"
+                type="search"
+                placeholder="Style code or article name"
+                autocomplete="off"
+              />
+              <input class="search-input" id="inventory-store" type="text" placeholder="Store id (optional)" />
+            </div>
+            <div class="inventory-actions">
+              <div class="chip-row">
+                <button class="chip toggle" id="inventory-alert-only" type="button">Alert only</button>
+              </div>
+              <div class="inventory-buttons">
+                <button class="button" id="inventory-search-btn" type="button">Search</button>
+                <button class="button button-outline" id="inventory-export-btn" type="button">Download CSV</button>
+              </div>
+            </div>
+          </div>
+          <div class="status" id="inventory-status">Enter at least 2 characters to search inventory.</div>
+          <table class="inventory-table">
+            <thead>
+              <tr>
+                <th>Style</th>
+                <th>Article</th>
+                <th>Category</th>
+                <th>Department</th>
+                <th>Supplier</th>
+                <th>Store</th>
+                <th>Qty</th>
+                <th>Days</th>
+                <th>Item MRP</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-table-body"></tbody>
+          </table>
+          <div class="empty" id="inventory-empty" hidden>No matching inventory.</div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script id="dashboard-data" type="application/json">
+      {{ dashboard_data | tojson }}
+    </script>
+    <script src="/static/dashboard.js" defer></script>
+  </body>
+</html>

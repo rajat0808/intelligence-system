@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in | Sindh Fashion</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main class="login-shell">
+      <section class="login-panel glass">
+        <div class="login-brand">
+          <img class="logo-image" src="/static/sindh-logo.png" alt="Sindh Fashion logo" />
+          <div>
+            <div class="login-title">Sign in</div>
+            <div class="login-subtitle">Sindh Fashion Inventory</div>
+          </div>
+        </div>
+        <form class="login-form" method="post" action="/login">
+          <label class="login-label" for="login-id">Login ID</label>
+          <input
+            class="search-input"
+            id="login-id"
+            name="username"
+            type="text"
+            placeholder="Enter login ID"
+            autocomplete="username"
+            required
+          />
+          <label class="login-label" for="login-password">Password</label>
+          <input
+            class="search-input"
+            id="login-password"
+            name="password"
+            type="password"
+            placeholder="Enter password"
+            autocomplete="current-password"
+            required
+          />
+          <button class="button login-button" type="submit">Sign in</button>
+        </form>
+        {% if error %}
+          <div class="login-error">{{ error }}</div>
+        {% endif %}
+        {% if not auth_enabled %}
+          <div class="login-help">
+            Login is disabled because dashboard credentials are not configured.
+          </div>
+        {% endif %}
+      </section>
+    </main>
+  </body>
+</html>

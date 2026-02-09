@@ -1,3 +1,3 @@
-from ml import predict_risk
+from app.ml.predict import model_is_available, predict_risk
 
-__all__ = ["predict_risk"]
+__all__ = ["model_is_available", "predict_risk"]

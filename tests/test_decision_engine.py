@@ -1,6 +1,6 @@
 import unittest
 
-from intelligence.decision_engine import evaluate_inventory
+from app.core.decision_engine import evaluate_inventory
 
 
 class DecisionEngineTest(unittest.TestCase):

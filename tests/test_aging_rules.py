@@ -1,6 +1,6 @@
 import unittest
 
-from intelligence.aging_rules import classify_status
+from app.core.aging_rules import classify_status
 
 
 class AgingRulesTest(unittest.TestCase):
