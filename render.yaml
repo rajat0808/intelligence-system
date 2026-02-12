@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: inventory-intelligence-platform
+    runtime: python
+    plan: free
+    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash run.sh
+    envVars:
+      - key: SCHEDULER_ENABLED
+        value: "false"
+      - key: EXCEL_AUTO_IMPORT
+        value: "true"
