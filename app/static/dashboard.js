@@ -101,28 +101,18 @@
     tableStatus: document.getElementById("table-status"),
     searchInput: document.getElementById("search-input"),
     filtersPanel: document.getElementById("filters-panel"),
-    trendHealthy: document.getElementById("trend-healthy"),
-    trendTransfer: document.getElementById("trend-transfer"),
-    trendRateRevised: document.getElementById("trend-rate-revised"),
-    trendVeryDanger: document.getElementById("trend-very-danger"),
-    trendHealthyLabel: document.getElementById("trend-healthy-label"),
-    trendTransferLabel: document.getElementById("trend-transfer-label"),
-    trendRateRevisedLabel: document.getElementById("trend-rate-revised-label"),
-    trendVeryDangerLabel: document.getElementById("trend-very-danger-label"),
     agingHealthy: document.getElementById("aging-healthy"),
     agingTransfer: document.getElementById("aging-transfer"),
     agingRateRevised: document.getElementById("aging-rate-revised"),
     agingVeryDanger: document.getElementById("aging-very-danger"),
     healthInsights: document.getElementById("health-insights"),
-    statusChart: document.getElementById("status-chart"),
     toast: document.getElementById("toast"),
     refreshBtn: document.getElementById("refresh-btn"),
     exportBtn: document.getElementById("export-btn"),
     resetBtn: document.getElementById("reset-btn"),
+    applyFiltersBtn: document.getElementById("apply-filters-btn"),
     liveToggle: document.getElementById("live-toggle"),
     liveStatus: document.getElementById("live-status"),
-    analyticsLive: document.getElementById("analytics-live"),
-    analyticsPredictive: document.getElementById("analytics-predictive"),
     systemHealthStatus: document.getElementById("system-health-status"),
     healthLatency: document.getElementById("health-latency"),
     healthLatencyBar: document.getElementById("health-latency-bar"),
@@ -301,16 +291,6 @@
     elements.rateRevisedCapital.textContent = formatNumber(totals.aging.RR_TT);
     elements.veryDangerCapital.textContent = formatNumber(totals.aging.VERY_DANGER);
 
-    elements.trendHealthy.textContent = formatNumber(totals.aging.HEALTHY);
-    elements.trendTransfer.textContent = formatNumber(totals.aging.TRANSFER);
-    elements.trendRateRevised.textContent = formatNumber(totals.aging.RR_TT);
-    elements.trendVeryDanger.textContent = formatNumber(totals.aging.VERY_DANGER);
-
-    elements.trendHealthyLabel.textContent = `Healthy capital (${totals.agingCounts.HEALTHY})`;
-    elements.trendTransferLabel.textContent = `Transfer capital (${totals.agingCounts.TRANSFER})`;
-    elements.trendRateRevisedLabel.textContent = `Rate revised capital (${totals.agingCounts.RR_TT})`;
-    elements.trendVeryDangerLabel.textContent = `Very danger capital (${totals.agingCounts.VERY_DANGER})`;
-
     elements.agingHealthy.textContent = formatNumber(totals.aging.HEALTHY);
     elements.agingTransfer.textContent = formatNumber(totals.aging.TRANSFER);
     elements.agingRateRevised.textContent = formatNumber(totals.aging.RR_TT);
@@ -318,7 +298,6 @@
 
     updateHealthBars(totals);
     updateHealthInsights(totals);
-    updateChart(totals);
   }
 
   function updateHealthBars(totals) {
@@ -354,53 +333,6 @@
       row.appendChild(value);
       elements.healthInsights.appendChild(row);
     });
-  }
-
-  function updateChart(totals) {
-    if (totals.aging.total <= 0) {
-      elements.statusChart.innerHTML = '<div class="empty">No status capital recorded.</div>';
-      return;
-    }
-    const values = [
-      totals.aging.HEALTHY,
-      totals.aging.TRANSFER,
-      totals.aging.RR_TT,
-      totals.aging.VERY_DANGER,
-    ];
-    const labels = ["Healthy", "Transfer", "Rate revised", "Very danger"];
-    const fills = [
-      "var(--maroon-200)",
-      "var(--maroon-300)",
-      "var(--maroon-400)",
-      "var(--maroon-600)",
-    ];
-    const max = Math.max(...values, 1);
-    const barWidth = 50;
-    const gap = 22;
-    const chartHeight = 120;
-    const baseline = 150;
-    const startX = 24;
-    const bars = values
-      .map((value, index) => {
-        const height = Math.max(8, Math.round((value / max) * chartHeight));
-        const x = startX + index * (barWidth + gap);
-        const y = baseline - height;
-        return `<rect x="${x}" y="${y}" width="${barWidth}" height="${height}" rx="10" fill="${fills[index]}" />`;
-      })
-      .join("");
-    const labelsMarkup = labels
-      .map((label, index) => {
-        const x = startX + index * (barWidth + gap) + barWidth / 2;
-        return `<text x="${x}" y="170" text-anchor="middle" font-size="9" fill="var(--text-300)">${label}</text>`;
-      })
-      .join("");
-
-    elements.statusChart.innerHTML = `
-      <svg viewBox="0 0 360 180" width="100%" height="100%" preserveAspectRatio="none" aria-hidden="true">
-        ${bars}
-        ${labelsMarkup}
-      </svg>
-    `;
   }
 
   function updateSystemHealth(data, latencyMs) {
@@ -507,6 +439,47 @@
     return buildPill(label, className ?? "unknown");
   }
 
+  function buildStoreBar(store) {
+    const bar = document.createElement("div");
+    bar.className = "store-bar";
+    const segments = [
+      { key: "HEALTHY", className: "healthy", label: levelLabels.HEALTHY },
+      { key: "TRANSFER", className: "transfer", label: levelLabels.TRANSFER },
+      { key: "RR_TT", className: "rate-revised", label: levelLabels.RR_TT },
+      { key: "VERY_DANGER", className: "very-danger", label: levelLabels.VERY_DANGER },
+    ];
+    const total =
+      toNumber(store.aging.HEALTHY) +
+      toNumber(store.aging.TRANSFER) +
+      toNumber(store.aging.RR_TT) +
+      toNumber(store.aging.VERY_DANGER);
+
+    if (total <= 0) {
+      bar.classList.add("empty");
+      const empty = document.createElement("span");
+      empty.className = "bar-empty";
+      empty.textContent = "No capital recorded";
+      bar.appendChild(empty);
+      return bar;
+    }
+
+    const ariaParts = [];
+    segments.forEach((segment) => {
+      const value = toNumber(store.aging[segment.key]);
+      if (value <= 0) return;
+      const percent = (value / total) * 100;
+      const span = document.createElement("span");
+      span.className = `bar-seg ${segment.className}`;
+      span.style.width = `${percent.toFixed(2)}%`;
+      span.title = `${segment.label}: ${formatNumber(value)}`;
+      bar.appendChild(span);
+      ariaParts.push(`${segment.label} ${formatNumber(value)}`);
+    });
+    bar.setAttribute("role", "img");
+    bar.setAttribute("aria-label", `Status mix. ${ariaParts.join(", ")}`);
+    return bar;
+  }
+
   function renderTable(stores) {
     elements.tableBody.innerHTML = "";
 
@@ -526,15 +499,20 @@
       row.appendChild(totalCell);
 
       const statusCell = document.createElement("td");
+      statusCell.className = "status-cell";
       statusCell.dataset.label = "Status mix";
-      statusCell.appendChild(
-        buildPillGroup([
-          { label: levelLabels.HEALTHY, value: store.aging.HEALTHY, className: "healthy" },
-          { label: levelLabels.TRANSFER, value: store.aging.TRANSFER, className: "transfer" },
-          { label: levelLabels.RR_TT, value: store.aging.RR_TT, className: "rate-revised" },
-          { label: levelLabels.VERY_DANGER, value: store.aging.VERY_DANGER, className: "very-danger" },
-        ])
-      );
+      const stack = document.createElement("div");
+      stack.className = "status-stack";
+      stack.appendChild(buildStoreBar(store));
+      const pills = buildPillGroup([
+        { label: levelLabels.HEALTHY, value: store.aging.HEALTHY, className: "healthy" },
+        { label: levelLabels.TRANSFER, value: store.aging.TRANSFER, className: "transfer" },
+        { label: levelLabels.RR_TT, value: store.aging.RR_TT, className: "rate-revised" },
+        { label: levelLabels.VERY_DANGER, value: store.aging.VERY_DANGER, className: "very-danger" },
+      ]);
+      pills.classList.add("store-pills");
+      stack.appendChild(pills);
+      statusCell.appendChild(stack);
       row.appendChild(statusCell);
 
       elements.tableBody.appendChild(row);
@@ -810,16 +788,26 @@
         const value = button.dataset.filter;
         if (group !== "aging" || !value) return;
         const targetSet = state.agingFilters;
-        if (targetSet.has(value)) {
-          targetSet.delete(value);
-          button.classList.remove("active");
+        const buttons = document.querySelectorAll('[data-filter-group="aging"]');
+        if (targetSet.has(value) && targetSet.size === 1) {
+          targetSet.clear();
+          buttons.forEach((btn) => btn.classList.remove("active"));
         } else {
+          targetSet.clear();
+          buttons.forEach((btn) => btn.classList.remove("active"));
           targetSet.add(value);
           button.classList.add("active");
         }
         applyFilters();
       });
     });
+
+    if (elements.applyFiltersBtn) {
+      elements.applyFiltersBtn.addEventListener("click", () => {
+        flashAction(elements.applyFiltersBtn);
+        applyFilters();
+      });
+    }
 
     elements.inventoryAlertOnly.addEventListener("click", () => {
       state.inventoryAlertOnly = !state.inventoryAlertOnly;
@@ -864,10 +852,6 @@
 
     elements.liveToggle.addEventListener("click", () => {
       setLiveState(!state.live);
-    });
-
-    elements.analyticsLive.addEventListener("click", () => {
-      elements.analyticsLive.classList.add("active");
     });
   }
 

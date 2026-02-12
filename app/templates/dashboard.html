@@ -126,89 +126,55 @@
           </div>
         </section>
 
-        <section class="analytics-grid">
-          <div class="panel">
-            <header class="panel-head">
-              <div>
-                <h2 class="panel-title">Status distribution</h2>
-                <div class="panel-sub">Capital split based on the latest inventory snapshot.</div>
+        <section class="panel system-health-panel">
+          <header>
+            <h2 class="panel-title">System Health</h2>
+            <div class="panel-sub">Live signals across pipeline and automation.</div>
+          </header>
+          <div class="system-health">
+            <div class="system-item">
+              <div class="health-row">
+                <span>API latency</span>
+                <span class="health-value" id="health-latency">--</span>
               </div>
-              <div class="panel-actions">
-                <button class="chip toggle active" id="analytics-live" type="button">Live</button>
-                <button class="chip toggle disabled" id="analytics-predictive" type="button" disabled>Predictive</button>
-              </div>
-            </header>
-            <div class="chart-area" id="status-chart" role="img" aria-label="Status capital distribution chart"></div>
-            <div class="trend-grid">
-              <div class="trend-card">
-                <div class="trend-label" id="trend-healthy-label">Healthy capital</div>
-                <div class="trend-value" id="trend-healthy">--</div>
-              </div>
-              <div class="trend-card">
-                <div class="trend-label" id="trend-transfer-label">Transfer capital</div>
-                <div class="trend-value" id="trend-transfer">--</div>
-              </div>
-              <div class="trend-card">
-                <div class="trend-label" id="trend-rate-revised-label">Rate revised capital</div>
-                <div class="trend-value" id="trend-rate-revised">--</div>
-              </div>
-              <div class="trend-card">
-                <div class="trend-label" id="trend-very-danger-label">Very danger capital</div>
-                <div class="trend-value alert" id="trend-very-danger">--</div>
-              </div>
+              <div class="health-bar"><span id="health-latency-bar"></span></div>
+            </div>
+            <div class="system-row">
+              <span>API status</span>
+              <span class="system-value" id="health-api-status">--</span>
+            </div>
+            <div class="system-row">
+              <span>Ingestion pipeline</span>
+              <span class="system-value" id="health-ingestion">--</span>
+            </div>
+            <div class="system-row">
+              <span>Automation queue</span>
+              <span class="system-value" id="health-automation">--</span>
+            </div>
+            <div class="system-row">
+              <span>Workflow engine</span>
+              <span class="system-value" id="health-workflow">--</span>
+            </div>
+            <div class="system-row">
+              <span>Alert pipeline</span>
+              <span class="system-value" id="health-alert">--</span>
             </div>
           </div>
-
-          <div class="panel system-health-panel">
-            <header>
-              <h2 class="panel-title">System Health</h2>
-              <div class="panel-sub">Live signals across pipeline and automation.</div>
-            </header>
-            <div class="system-health">
-              <div class="system-item">
-                <div class="health-row">
-                  <span>API latency</span>
-                  <span class="health-value" id="health-latency">--</span>
-                </div>
-                <div class="health-bar"><span id="health-latency-bar"></span></div>
-              </div>
-              <div class="system-row">
-                <span>API status</span>
-                <span class="system-value" id="health-api-status">--</span>
-              </div>
-              <div class="system-row">
-                <span>Ingestion pipeline</span>
-                <span class="system-value" id="health-ingestion">--</span>
-              </div>
-              <div class="system-row">
-                <span>Automation queue</span>
-                <span class="system-value" id="health-automation">--</span>
-              </div>
-              <div class="system-row">
-                <span>Workflow engine</span>
-                <span class="system-value" id="health-workflow">--</span>
-              </div>
-              <div class="system-row">
-                <span>Alert pipeline</span>
-                <span class="system-value" id="health-alert">--</span>
-              </div>
+          <div class="system-meta">
+            <div class="system-meta-row">
+              <span>App</span>
+              <span id="health-app">--</span>
             </div>
-            <div class="system-meta">
-              <div class="system-meta-row">
-                <span>App</span>
-                <span id="health-app">--</span>
-              </div>
-              <div class="system-meta-row">
-                <span>Env</span>
-                <span id="health-environment">--</span>
-              </div>
-              <div class="system-meta-row">
-                <span>Server time</span>
-                <span id="health-time">--</span>
-              </div>
+            <div class="system-meta-row">
+              <span>Env</span>
+              <span id="health-environment">--</span>
             </div>
-            <div class="status" id="system-health-status">Waiting for health check...</div>
+            <div class="system-meta-row">
+              <span>Server time</span>
+              <span id="health-time">--</span>
+            </div>
           </div>
+          <div class="status" id="system-health-status">Waiting for health check...</div>
         </section>
 
         <section class="panel" id="aging-panel">
@@ -277,6 +243,9 @@
                 </div>
               </div>
             </div>
+            <div class="filter-actions">
+              <button class="button button-outline" id="apply-filters-btn" type="button">Apply filters</button>
+            </div>
           </div>
           <div class="status" id="filter-status">Waiting for data...</div>
         </section>
@@ -286,7 +255,7 @@
             <h2 class="panel-title">Store status breakdown</h2>
             <div class="panel-sub">Capital status by store.</div>
           </header>
-          <table>
+          <table class="store-table">
             <thead>
               <tr>
                 <th>Store</th>
