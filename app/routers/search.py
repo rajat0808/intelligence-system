@@ -61,6 +61,7 @@ def search_inventory(
             params[key] = entry.lower()
         department_clause = "AND ({})".format(" OR ".join(department_filters))
 
+    # noinspection SqlNoDataSourceInspection
     sql = text(
         """
         SELECT

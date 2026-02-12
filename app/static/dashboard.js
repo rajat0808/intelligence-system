@@ -1,4 +1,83 @@
 (() => {
+  /**
+   * @typedef {Object} DangerSummary
+   * @property {string} store_id
+   * @property {number} EARLY
+   * @property {number} HIGH
+   * @property {number} CRITICAL
+   * @property {number} total_danger_capital
+   */
+  /**
+   * @typedef {Object} AgingSummary
+   * @property {string} store_id
+   * @property {number} HEALTHY
+   * @property {number} TRANSFER
+   * @property {number} RR_TT
+   * @property {number} VERY_DANGER
+   * @property {number} total_aging_capital
+   */
+  /**
+   * @typedef {Object} DashboardData
+   * @property {string=} date
+   * @property {number=} store_count
+   * @property {DangerSummary[]=} results
+   * @property {AgingSummary[]=} aging_results
+   */
+  /**
+   * @typedef {Object} DangerTotals
+   * @property {number} EARLY
+   * @property {number} HIGH
+   * @property {number} CRITICAL
+   * @property {number} total_danger_capital
+   */
+  /**
+   * @typedef {Object} AgingTotals
+   * @property {number} HEALTHY
+   * @property {number} TRANSFER
+   * @property {number} RR_TT
+   * @property {number} VERY_DANGER
+   * @property {number} total_aging_capital
+   */
+  /**
+   * @typedef {Object} StoreSummary
+   * @property {string} id
+   * @property {DangerTotals} danger
+   * @property {AgingTotals} aging
+   * @property {number} totalAging
+   */
+  /**
+   * @typedef {Object} InventoryItem
+   * @property {string=} style_code
+   * @property {string=} article_name
+   * @property {string=} category
+   * @property {string=} department_name
+   * @property {string=} department
+   * @property {string=} supplier_name
+   * @property {string=} supplier
+   * @property {string|number=} store_id
+   * @property {number=} quantity
+   * @property {number=} qty
+   * @property {number=} age_days
+   * @property {number=} days
+   * @property {number=} item_mrp
+   * @property {number=} mrp
+   * @property {string=} aging_status
+   */
+  /**
+   * @typedef {Object} InventorySearchResponse
+   * @property {number=} count
+   * @property {InventoryItem[]=} results
+   */
+  /**
+   * @typedef {Object} FetchResult
+   * @property {boolean} ok
+   * @property {boolean} unauthorized
+   * @property {number} status
+   * @property {any} data
+   * @property {any=} error
+   */
+
+  /** @type {{ allStores: StoreSummary[], filteredStores: StoreSummary[], agingFilters: Set<string>, live: boolean, liveTimer: number | null, inventoryAlertOnly: boolean, inventoryResults: InventoryItem[] }} */
   const state = {
     allStores: [],
     filteredStores: [],
@@ -92,6 +171,7 @@
     VERY_DANGER: "very-danger",
   };
 
+  /** @returns {DashboardData | null} */
   function readSeedData() {
     const node = document.getElementById("dashboard-data");
     if (!node) return null;
@@ -119,6 +199,10 @@
     return formatNumber(value);
   }
 
+  /**
+   * @param {DashboardData | null | undefined} data
+   * @returns {StoreSummary[]}
+   */
   function buildStoreList(data) {
     const dangerResults = Array.isArray(data?.results) ? data.results : [];
     const agingResults = Array.isArray(data?.aging_results) ? data.aging_results : [];
@@ -337,6 +421,33 @@
     elements.healthTime.textContent = data?.time ?? "--";
   }
 
+  /** @returns {Promise<FetchResult>} */
+  async function fetchJsonWithAuth(url, options = {}) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 401) {
+        window.location.href = "/login";
+        return { ok: false, unauthorized: true, status: response.status, data: null };
+      }
+      let data;
+      try {
+        data = await response.json();
+      } catch (error) {
+        data = null;
+      }
+      return { ok: response.ok, unauthorized: false, status: response.status, data };
+    } catch (error) {
+      return { ok: false, unauthorized: false, status: 0, data: null, error };
+    }
+  }
+
+  /** @param {FetchResult} result */
+  function logResultError(result) {
+    if (result.error) {
+      console.error(result.error);
+    }
+  }
+
   async function refreshHealth(showNotice) {
     if (!elements.systemHealthStatus) return;
     elements.systemHealthStatus.textContent = "Checking system health...";
@@ -345,7 +456,10 @@
       const response = await fetch("/health", { cache: "no-store" });
       const latencyMs = Math.round(performance.now() - start);
       if (!response.ok) {
-        throw new Error(`Request failed with ${response.status}`);
+        elements.systemHealthStatus.textContent = "Failed to load system health.";
+        showToast("Failed to load system health", "error");
+        console.error(new Error(`Request failed with ${response.status}`));
+        return;
       }
       const data = await response.json();
       updateSystemHealth(data, latencyMs);
@@ -463,14 +577,18 @@
     elements.inventoryEmpty.hidden = items.length !== 0;
   }
 
+  function resetInventoryResults(message) {
+    elements.inventoryStatus.textContent = message;
+    elements.inventoryTableBody.innerHTML = "";
+    elements.inventoryEmpty.hidden = true;
+  }
+
   async function runInventorySearch() {
     const query = elements.inventoryQuery.value.trim();
     const storeId = elements.inventoryStore.value.trim();
 
     if (query.length < 2) {
-      elements.inventoryStatus.textContent = "Enter at least 2 characters to search inventory.";
-      elements.inventoryEmpty.hidden = true;
-      elements.inventoryTableBody.innerHTML = "";
+      resetInventoryResults("Enter at least 2 characters to search inventory.");
       return;
     }
 
@@ -485,35 +603,32 @@
     elements.inventoryStatus.textContent = "Searching inventory...";
 
     try {
-      const response = await fetch(`/search/inventory?${params.toString()}`, { cache: "no-store" });
-      if (response.status === 401) {
-        window.location.href = "/login";
+      const result = await fetchJsonWithAuth(`/search/inventory?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (result.unauthorized) {
         return;
       }
-      if (!response.ok) {
+      if (!result.ok) {
         let message = "Inventory search failed.";
-        try {
-          const errorData = await response.json();
-          if (errorData?.detail) {
-            message = errorData.detail;
-          }
-        } catch (error) {
-          console.warn("Inventory search error", error);
+        if (result.data?.detail) {
+          message = result.data.detail;
         }
-        elements.inventoryStatus.textContent = message;
-        elements.inventoryTableBody.innerHTML = "";
-        elements.inventoryEmpty.hidden = true;
+        resetInventoryResults(message);
+        logResultError(result);
         return;
       }
-      const data = await response.json();
-      const results = Array.isArray(data?.results) ? data.results : [];
+      if (!result.data) {
+        resetInventoryResults("Inventory search failed.");
+        return;
+      }
+      const data = /** @type {InventorySearchResponse} */ (result.data ?? {});
+      const results = Array.isArray(data.results) ? data.results : [];
       state.inventoryResults = results;
       renderInventoryResults(results);
-      elements.inventoryStatus.textContent = `Found ${data?.count ?? results.length} items.`;
+      elements.inventoryStatus.textContent = `Found ${data.count ?? results.length} items.`;
     } catch (error) {
-      elements.inventoryStatus.textContent = "Inventory search failed.";
-      elements.inventoryTableBody.innerHTML = "";
-      elements.inventoryEmpty.hidden = true;
+      resetInventoryResults("Inventory search failed.");
       console.error(error);
     }
   }
@@ -559,6 +674,19 @@
     return text;
   }
 
+  function downloadCsv(filename, headers, rows) {
+    const csv = [headers.join(","), ...rows.map((row) => row.map(escapeCsv).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
   function exportCsv() {
     if (!state.filteredStores.length) {
       showToast("No stores to export", "error");
@@ -580,16 +708,7 @@
       store.aging.RR_TT,
       store.aging.VERY_DANGER,
     ]);
-    const csv = [headers.join(","), ...rows.map((row) => row.map(escapeCsv).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "store_status_export.csv";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    downloadCsv("store_status_export.csv", headers, rows);
     showToast("Export ready", "success");
   }
 
@@ -624,16 +743,7 @@
       exportValue(item.item_mrp ?? item.mrp),
       exportValue(item.aging_status),
     ]);
-    const csv = [headers.join(","), ...rows.map((row) => row.map(escapeCsv).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "inventory_search_export.csv";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    downloadCsv("inventory_search_export.csv", headers, rows);
     showToast("Inventory export ready", "success");
   }
 
@@ -646,10 +756,10 @@
       state.liveTimer = null;
     }
     if (enabled) {
-      refreshHealth(false);
+      void refreshHealth(false);
       state.liveTimer = window.setInterval(() => {
-        refreshData(false);
-        refreshHealth(false);
+        void refreshData(false);
+        void refreshHealth(false);
       }, 60000);
     }
   }
@@ -657,15 +767,17 @@
   async function refreshData(showNotice) {
     elements.tableStatus.textContent = "Loading data...";
     try {
-      const response = await fetch("/dashboard/store-danger-summary", { cache: "no-store" });
-      if (response.status === 401) {
-        window.location.href = "/login";
+      const result = await fetchJsonWithAuth("/dashboard/store-danger-summary", { cache: "no-store" });
+      if (result.unauthorized) {
         return;
       }
-      if (!response.ok) {
-        throw new Error(`Request failed with ${response.status}`);
+      if (!result.ok || !result.data) {
+        elements.tableStatus.textContent = "Failed to load dashboard data.";
+        showToast("Failed to load dashboard data", "error");
+        logResultError(result);
+        return;
       }
-      const data = await response.json();
+      const data = /** @type {DashboardData} */ (result.data ?? {});
       state.allStores = buildStoreList(data);
       elements.lastUpdated.textContent = data?.date ? String(data.date) : "unknown";
       applyFilters();
@@ -716,7 +828,7 @@
 
     elements.inventorySearchBtn.addEventListener("click", () => {
       flashAction(elements.inventorySearchBtn);
-      runInventorySearch();
+      void runInventorySearch();
     });
 
     if (elements.inventoryExportBtn) {
@@ -727,7 +839,7 @@
 
     const inventoryKeyHandler = (event) => {
       if (event.key === "Enter") {
-        runInventorySearch();
+        void runInventorySearch();
       }
     };
     elements.inventoryQuery.addEventListener("keydown", inventoryKeyHandler);
@@ -735,8 +847,8 @@
 
     elements.refreshBtn.addEventListener("click", () => {
       flashAction(elements.refreshBtn);
-      refreshData(true);
-      refreshHealth(false);
+      void refreshData(true);
+      void refreshHealth(false);
     });
 
     elements.exportBtn.addEventListener("click", () => {
@@ -769,7 +881,7 @@
     } else {
       elements.filterStatus.textContent = "Loading store data...";
       elements.tableStatus.textContent = "Loading store data...";
-      refreshData(false);
+      void refreshData(false);
     }
     setLiveState(true);
   });

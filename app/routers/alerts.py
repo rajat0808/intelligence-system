@@ -13,6 +13,7 @@ def run_alerts_now(
 ):
     try:
         stats = run_alerts(send_notifications=send_notifications)
+    # noinspection PyBroadException
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "completed", "stats": stats}

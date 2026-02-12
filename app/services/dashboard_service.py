@@ -8,6 +8,7 @@ from app.database.engine import engine
 
 
 def store_danger_summary():
+    # noinspection SqlNoDataSourceInspection
     sql = text(
         """
         SELECT

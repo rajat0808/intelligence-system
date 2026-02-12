@@ -152,23 +152,17 @@ def _acquire_job_run(
 
 def _mark_job_success(job_id: int) -> None:
     now = utc_now()
-    db = SessionLocal()
-    try:
-        db.execute(
-            update(JobLog)
-            .where(JobLog.id == job_id)
-            .values(
-                status=STATUS_SUCCESS,
-                finished_at=now,
-                last_heartbeat_at=now,
-                error_message=None,
-                next_retry_at=None,
-                updated_at=now,
-            )
-        )
-        db.commit()
-    finally:
-        db.close()
+    _execute_job_update(
+        job_id,
+        {
+            "status": STATUS_SUCCESS,
+            "finished_at": now,
+            "last_heartbeat_at": now,
+            "error_message": None,
+            "next_retry_at": None,
+            "updated_at": now,
+        },
+    )
 
 
 def _mark_job_failure(job_id: int, attempt: int, error: Exception, retry_seconds: int, max_retries: int) -> None:
@@ -176,33 +170,31 @@ def _mark_job_failure(job_id: int, attempt: int, error: Exception, retry_seconds
     next_retry = None
     if attempt < max_retries:
         next_retry = now + timedelta(seconds=retry_seconds * max(1, attempt))
-    db = SessionLocal()
-    try:
-        db.execute(
-            update(JobLog)
-            .where(JobLog.id == job_id)
-            .values(
-                status=STATUS_FAILED,
-                finished_at=now,
-                last_heartbeat_at=now,
-                error_message=_truncate_error("{}: {}".format(type(error).__name__, error)),
-                next_retry_at=next_retry,
-                updated_at=now,
-            )
-        )
-        db.commit()
-    finally:
-        db.close()
+    _execute_job_update(
+        job_id,
+        {
+            "status": STATUS_FAILED,
+            "finished_at": now,
+            "last_heartbeat_at": now,
+            "error_message": _truncate_error("{}: {}".format(type(error).__name__, error)),
+            "next_retry_at": next_retry,
+            "updated_at": now,
+        },
+    )
 
 
 def _heartbeat(job_id: int) -> None:
     now = utc_now()
+    _execute_job_update(job_id, {"last_heartbeat_at": now, "updated_at": now})
+
+
+def _execute_job_update(job_id: int, values: dict) -> None:
     db = SessionLocal()
     try:
         db.execute(
             update(JobLog)
             .where(JobLog.id == job_id)
-            .values(last_heartbeat_at=now, updated_at=now)
+            .values(**values)
         )
         db.commit()
     finally:
@@ -238,6 +230,7 @@ class HeartbeatThread:
         while not self._stop_event.wait(self._interval):
             try:
                 _heartbeat(self._job_id)
+            # noinspection PyBroadException
             except Exception:
                 logger.exception("Heartbeat update failed for job %s", self._job_id)
 
@@ -286,6 +279,7 @@ class DailyJobScheduler:
             _mark_job_success(job_log.id)
             logger.info("Job %s completed for %s", job_log.job_name, run_date)
             return True
+        # noinspection PyBroadException
         except Exception as exc:
             logger.exception("Job %s failed for %s", job_log.job_name, run_date)
             _mark_job_failure(
@@ -305,6 +299,7 @@ class DailyJobScheduler:
         while not self._stop_event.is_set():
             try:
                 self.run_once()
+            # noinspection PyBroadException
             except Exception:
                 logger.exception("Scheduler loop error.")
             self._stop_event.wait(poll_seconds)

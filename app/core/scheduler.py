@@ -120,9 +120,11 @@ class Scheduler:
         else:
             self._safe_run(job)
 
-    def _safe_run(self, job: ScheduledJob) -> None:
+    @staticmethod
+    def _safe_run(job: ScheduledJob) -> None:
         try:
             job.func()
+        # noinspection PyBroadException
         except Exception:
             logger.exception("Scheduled job failed: %s", job.name)
 

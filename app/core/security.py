@@ -45,14 +45,20 @@ def _decode_jwt(token: str) -> dict:
         ) from exc
 
     options = {"verify_aud": bool(settings.JWT_AUDIENCE)}
-    return jwt.decode(
-        token,
-        settings.JWT_SECRET,
-        algorithms=[settings.JWT_ALGORITHM],
-        audience=settings.JWT_AUDIENCE,
-        issuer=settings.JWT_ISSUER,
-        options=options,
-    )
+    try:
+        return jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+            audience=settings.JWT_AUDIENCE,
+            issuer=settings.JWT_ISSUER,
+            options=options,
+        )
+    except jwt.PyJWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid JWT",
+        ) from exc
 
 
 def authenticate_request(
@@ -75,7 +81,7 @@ def authenticate_request(
         try:
             payload = _decode_jwt(token)
             return {"auth_type": "jwt", "payload": payload}
-        except Exception:
+        except HTTPException:
             if settings.JWT_REQUIRED:
                 raise
 

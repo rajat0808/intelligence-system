@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from bisect import bisect_left, bisect_right
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import json
 import sys
 
@@ -24,27 +24,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sqlalchemy import create_engine, text
 
+from app.core.dates import normalize_date
 from app.database import engine as default_engine
 from app.ml.features import build_feature_dict
 from app.ml.model_io import save_model
-
-
-def _to_date(value):
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str):
-        value_text = value.strip()
-        if not value_text:
-            return None
-        try:
-            return date.fromisoformat(value_text)
-        except ValueError:
-            return None
-    return None
 
 
 def _load_rows(engine, query, params=None):
@@ -54,6 +37,7 @@ def _load_rows(engine, query, params=None):
 
 
 def _load_sales(engine):
+    # noinspection SqlNoDataSourceInspection
     return _load_rows(
         engine,
         """
@@ -64,6 +48,7 @@ def _load_sales(engine):
 
 
 def _load_daily_snapshots(engine):
+    # noinspection SqlNoDataSourceInspection
     return _load_rows(
         engine,
         """
@@ -89,6 +74,7 @@ def _load_daily_snapshots(engine):
 
 
 def _load_inventory(engine):
+    # noinspection SqlNoDataSourceInspection
     return _load_rows(
         engine,
         """
@@ -112,7 +98,7 @@ def _load_inventory(engine):
 def _build_sales_index(sales_rows):
     index = {}
     for row in sales_rows:
-        sale_date = _to_date(row.get("sale_date"))
+        sale_date = normalize_date(row.get("sale_date"))
         if sale_date is None:
             continue
         key = (row.get("store_id"), row.get("product_id"))
@@ -148,7 +134,7 @@ def _sum_sales(index, key, start_date, end_date):
 def _recent_sales_keys(sales_rows, start_date, end_date):
     keys = set()
     for row in sales_rows:
-        sale_date = _to_date(row.get("sale_date"))
+        sale_date = normalize_date(row.get("sale_date"))
         if sale_date is None:
             continue
         if sale_date < start_date or sale_date > end_date:
@@ -159,6 +145,50 @@ def _recent_sales_keys(sales_rows, start_date, end_date):
     return keys
 
 
+def _append_training_row(features, labels, dates, row, label, as_of_date, age_days=None):
+    features.append(
+        build_feature_dict(
+            category=row.get("category"),
+            quantity=row.get("quantity"),
+            cost_price=row.get("cost_price"),
+            lifecycle_start_date=row.get("lifecycle_start_date"),
+            as_of_date=as_of_date,
+            age_days=age_days,
+            current_price=row.get("current_price"),
+            mrp=row.get("mrp"),
+            department_name=row.get("department_name"),
+            supplier_name=row.get("supplier_name"),
+            store_id=row.get("store_id"),
+        )
+    )
+    labels.append(label)
+    dates.append(as_of_date)
+
+
+def _build_training_set(rows, *, label_fn, as_of_fn, age_days_fn=None):
+    features = []
+    labels = []
+    dates = []
+    for row in rows:
+        as_of_date = as_of_fn(row)
+        if as_of_date is None:
+            continue
+        label = label_fn(row, as_of_date)
+        if label is None:
+            continue
+        age_days = age_days_fn(row) if age_days_fn else None
+        _append_training_row(
+            features,
+            labels,
+            dates,
+            row,
+            label,
+            as_of_date,
+            age_days=age_days,
+        )
+    return features, labels, dates
+
+
 def build_training_data(engine, horizon_days, as_of_date=None):
     sales_rows = _load_sales(engine)
     if not sales_rows:
@@ -167,73 +197,52 @@ def build_training_data(engine, horizon_days, as_of_date=None):
     snapshot_rows = _load_daily_snapshots(engine)
     if snapshot_rows:
         sales_index = _build_sales_index(sales_rows)
-        features = []
-        labels = []
-        dates = []
-        for row in snapshot_rows:
-            snapshot_date = _to_date(row.get("snapshot_date"))
-            if snapshot_date is None:
-                continue
+
+        def snapshot_as_of(row):
+            return normalize_date(row.get("snapshot_date"))
+
+        def snapshot_label(row, as_of_value):
             key = (row.get("store_id"), row.get("product_id"))
             sold_qty = _sum_sales(
                 sales_index,
                 key,
-                snapshot_date,
-                snapshot_date + timedelta(days=horizon_days),
+                as_of_value,
+                as_of_value + timedelta(days=horizon_days),
             )
-            label = 1 if sold_qty > 0 else 0
-            features.append(
-                build_feature_dict(
-                    category=row.get("category"),
-                    quantity=row.get("quantity"),
-                    cost_price=row.get("cost_price"),
-                    lifecycle_start_date=row.get("lifecycle_start_date"),
-                    as_of_date=snapshot_date,
-                    age_days=row.get("age_days"),
-                    current_price=row.get("current_price"),
-                    mrp=row.get("mrp"),
-                    department_name=row.get("department_name"),
-                    supplier_name=row.get("supplier_name"),
-                    store_id=row.get("store_id"),
-                )
-            )
-            labels.append(label)
-            dates.append(snapshot_date)
+            return 1 if sold_qty > 0 else 0
+
+        features, labels, dates = _build_training_set(
+            snapshot_rows,
+            label_fn=snapshot_label,
+            as_of_fn=snapshot_as_of,
+            age_days_fn=lambda row: row.get("age_days"),
+        )
         return features, labels, dates, "daily_snapshots+sales"
 
     inventory_rows = _load_inventory(engine)
     if not inventory_rows:
         raise ValueError("No inventory rows available for training.")
 
-    as_of = _to_date(as_of_date) or date.today()
+    as_of = normalize_date(as_of_date) or date.today()
     window_start = as_of - timedelta(days=horizon_days)
     recent_keys = _recent_sales_keys(sales_rows, window_start, as_of)
-    features = []
-    labels = []
-    dates = []
-    for row in inventory_rows:
+
+    def inventory_as_of(_row):
+        return as_of
+
+    def inventory_label(row, _as_of_date):
         key = (row.get("store_id"), row.get("product_id"))
-        label = 1 if key in recent_keys else 0
-        features.append(
-            build_feature_dict(
-                category=row.get("category"),
-                quantity=row.get("quantity"),
-                cost_price=row.get("cost_price"),
-                lifecycle_start_date=row.get("lifecycle_start_date"),
-                as_of_date=as_of,
-                current_price=row.get("current_price"),
-                mrp=row.get("mrp"),
-                department_name=row.get("department_name"),
-                supplier_name=row.get("supplier_name"),
-                store_id=row.get("store_id"),
-            )
-        )
-        labels.append(label)
-        dates.append(as_of)
+        return 1 if key in recent_keys else 0
+
+    features, labels, dates = _build_training_set(
+        inventory_rows,
+        label_fn=inventory_label,
+        as_of_fn=inventory_as_of,
+    )
     return features, labels, dates, "inventory+recent_sales"
 
 
-def _split_data(features, labels, dates, test_size, random_state, use_time_split):
+def _split_data(labels, dates, test_size, random_state, use_time_split):
     indices = list(range(len(labels)))
     if use_time_split and dates and len(set(dates)) > 1:
         indices.sort(key=lambda idx: dates[idx])
@@ -303,7 +312,7 @@ def train_and_export(
         raise ValueError("Need both positive and negative outcomes to train.")
 
     train_idx, test_idx = _split_data(
-        features, labels, dates, test_size, random_state, use_time_split
+        labels, dates, test_size, random_state, use_time_split
     )
     x_train = [features[idx] for idx in train_idx]
     y_train = [labels[idx] for idx in train_idx]
@@ -332,7 +341,7 @@ def train_and_export(
 
     metrics = _compute_metrics(y_test, y_prob)
     metadata = {
-        "trained_at": datetime.utcnow().isoformat() + "Z",
+        "trained_at": datetime.now(timezone.utc).isoformat(),
         "training_source": source,
         "horizon_days": horizon_days,
         "row_count": len(features),

@@ -61,6 +61,7 @@ def _load_model_once():
         return _MODEL
     try:
         model, metadata = load_model()
+    # noinspection PyBroadException
     except Exception as exc:
         _MODEL_LOAD_ERROR = exc
         _LOGGER.warning("Failed to load ML model: %s", exc)

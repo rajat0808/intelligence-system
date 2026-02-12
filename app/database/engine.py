@@ -55,17 +55,17 @@ def ensure_sqlite_schema():
     with engine.connect() as conn:
         with conn.begin():
             for table_name, columns in _SQLITE_COLUMN_DEFAULTS.items():
-                existing = {
-                    row["name"]
-                    for row in conn.execute(
-                        text(f"PRAGMA table_info({table_name})")
-                    ).mappings()
-                }
+                # noinspection SqlNoDataSourceInspection
+                existing_rows = conn.execute(
+                    text(f"PRAGMA table_info({table_name})")
+                ).mappings()
+                existing = {row["name"] for row in existing_rows}
                 if not existing:
                     continue
                 for column_name, ddl in columns.items():
                     if column_name in existing:
                         continue
+                    # noinspection SqlNoDataSourceInspection
                     conn.execute(
                         text(
                             "ALTER TABLE {} ADD COLUMN {} {}".format(

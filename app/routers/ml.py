@@ -1,33 +1,15 @@
-from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import text
 
+from app.core.dates import normalize_date
 from app.database.engine import engine
 from app.ml.predict import predict_risk
 from app.schemas.ml import MLPredictRequest, MLPredictResponse
 from app.services.ml_service import predict_and_log
 
 router = APIRouter(prefix="/ml", tags=["ML"])
-
-
-def _normalize_start_date(value):
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str):
-        value_text = value.strip()
-        if not value_text:
-            return None
-        try:
-            return date.fromisoformat(value_text)
-        except ValueError:
-            return None
-    return None
 
 
 @router.post("/predict", response_model=MLPredictResponse)
@@ -82,6 +64,7 @@ def inventory_risk(
     if where_clauses:
         where_sql = " AND " + " AND ".join(where_clauses)
 
+    # noinspection SqlNoDataSourceInspection
     sql = text(
         """
         SELECT
@@ -111,7 +94,7 @@ def inventory_risk(
 
     results = []
     for row in rows:
-        start_date = _normalize_start_date(row["lifecycle_start_date"])
+        start_date = normalize_date(row["lifecycle_start_date"])
         item_mrp = row["mrp"]
         if item_mrp is None or item_mrp <= 0:
             item_mrp = row["cost_price"]

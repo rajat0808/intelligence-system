@@ -34,6 +34,7 @@ def run_alerts(*, send_notifications=True):
     db = SessionLocal()
     today = date.today()
 
+    # noinspection SqlNoDataSourceInspection
     inventories = db.execute(
         text(
             """
@@ -162,7 +163,7 @@ def run_alerts(*, send_notifications=True):
                         try:
                             send_whatsapp(message, phone)
                             delivered = True
-                        except Exception as exc:
+                        except (RuntimeError, ValueError) as exc:
                             failure_reason = str(exc)
 
                     db.add(
@@ -183,6 +184,7 @@ def run_alerts(*, send_notifications=True):
                     sent_alerts.add(alert_key)
 
         db.commit()
+    # noinspection PyBroadException
     except Exception:
         db.rollback()
         raise
