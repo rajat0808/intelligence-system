@@ -4,13 +4,12 @@ import logging
 import os
 import socket
 import threading
-import time as time_module
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from typing import Callable, Optional
 
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.database import Base, SessionLocal, engine, ensure_sqlite_schema
 from app.models import import_all_models
@@ -21,6 +20,8 @@ logger = logging.getLogger(__name__)
 STATUS_RUNNING = "running"
 STATUS_SUCCESS = "success"
 STATUS_FAILED = "failed"
+
+JOB_FAILURE_EXCEPTIONS = (SQLAlchemyError, OSError, RuntimeError, ValueError)
 
 
 def ensure_scheduler_schema() -> None:
@@ -230,8 +231,7 @@ class HeartbeatThread:
         while not self._stop_event.wait(self._interval):
             try:
                 _heartbeat(self._job_id)
-            # noinspection PyBroadException
-            except Exception:
+            except SQLAlchemyError:
                 logger.exception("Heartbeat update failed for job %s", self._job_id)
 
 
@@ -279,8 +279,7 @@ class DailyJobScheduler:
             _mark_job_success(job_log.id)
             logger.info("Job %s completed for %s", job_log.job_name, run_date)
             return True
-        # noinspection PyBroadException
-        except Exception as exc:
+        except JOB_FAILURE_EXCEPTIONS as exc:
             logger.exception("Job %s failed for %s", job_log.job_name, run_date)
             _mark_job_failure(
                 job_log.id,
@@ -299,8 +298,7 @@ class DailyJobScheduler:
         while not self._stop_event.is_set():
             try:
                 self.run_once()
-            # noinspection PyBroadException
-            except Exception:
+            except JOB_FAILURE_EXCEPTIONS:
                 logger.exception("Scheduler loop error.")
             self._stop_event.wait(poll_seconds)
 

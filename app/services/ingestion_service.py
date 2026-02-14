@@ -1,7 +1,7 @@
 import importlib
 import logging
 import threading
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -14,6 +14,7 @@ from app.database import Base, SessionLocal, engine, ensure_sqlite_schema
 from app.models.inventory import Inventory
 from app.models.product import Product
 from app.models.stores import Store
+from app.services.product_service import apply_price_update
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ _ALIAS_SPECS = (
     (("department", "name"), "department_name"),
     (("category", "name"), "category"),
     (("item", "mrp"), "mrp"),
+    (("price",), "price"),
     (("stock", "days"), "stock_days"),
     (("cbs", "qty"), "quantity"),
     (("qty",), "quantity"),
@@ -79,6 +81,7 @@ def _import_models():
         "app.models.delivery_logs",
         "app.models.inventory",
         "app.models.lifecycle",
+        "app.models.price_history",
         "app.models.product",
         "app.models.risk_log",
         "app.models.sales",
@@ -115,7 +118,7 @@ def _looks_like_header_row(row, header_set):
         non_blank += 1
         if normalize_header(value) in header_set:
             matches += 1
-    return non_blank > 0 and matches == non_blank
+    return 0 < non_blank == matches
 
 
 def normalize_header(value):
@@ -340,6 +343,10 @@ def upsert_product(db, row):
     category = to_str(row.get("category"), "category")
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
+    price_value = row.get("price")
+    price = None
+    if not _is_blank(price_value):
+        price = to_float(price_value, "price")
     department_value = row.get("department_name")
     department_name = None
     if not _is_blank(department_value):
@@ -349,9 +356,7 @@ def upsert_product(db, row):
         db,
         Product,
         product_id,
-        Product.store_id == store_id,
         Product.style_code == style_code,
-        Product.barcode == barcode,
     )
     values = {
         "store_id": store_id,
@@ -366,7 +371,29 @@ def upsert_product(db, row):
         values["department_name"] = department_name
     elif not product:
         values["department_name"] = ""
-    return apply_upsert(db, product, Product, values)
+    if product:
+        if product.store_id != store_id:
+            logger.warning(
+                "Style code %s already exists for store %s; received store %s.",
+                style_code,
+                product.store_id,
+                store_id,
+            )
+        for key, value in values.items():
+            if key == "store_id":
+                continue
+            setattr(product, key, value)
+        if price is not None:
+            apply_price_update(db, product, price)
+        return "updated"
+
+    if price is None:
+        price = mrp
+    product = Product(**values, price=price)
+    if price is not None:
+        product.last_price_update = datetime.now(timezone.utc)
+    db.add(product)
+    return "inserted"
 
 
 def upsert_inventory(db, row):
@@ -432,15 +459,17 @@ def upsert_product_from_daily_update(db, row):
     category = to_str(row.get("category"), "category")
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
+    price_value = row.get("price")
+    price = None
+    if not _is_blank(price_value):
+        price = to_float(price_value, "price")
     department_name = to_str(row.get("department_name"), "department_name")
 
     product = get_existing(
         db,
         Product,
         None,
-        Product.store_id == store_id,
         Product.style_code == style_code,
-        Product.barcode == barcode,
     )
     values = {
         "store_id": store_id,
@@ -453,10 +482,25 @@ def upsert_product_from_daily_update(db, row):
         "department_name": department_name,
     }
     if product:
+        if product.store_id != store_id:
+            logger.warning(
+                "Style code %s already exists for store %s; received store %s.",
+                style_code,
+                product.store_id,
+                store_id,
+            )
         for key, value in values.items():
+            if key == "store_id":
+                continue
             setattr(product, key, value)
+        if price is not None:
+            apply_price_update(db, product, price)
         return "updated", product
-    product = Product(**values)
+    if price is None:
+        price = mrp
+    product = Product(**values, price=price)
+    if price is not None:
+        product.last_price_update = datetime.now(timezone.utc)
     db.add(product)
     db.flush()
     return "inserted", product
@@ -649,7 +693,8 @@ class ExcelWatchService:
                 continue
             self._import_file(file_path)
 
-    def _is_candidate(self, file_path):
+    @staticmethod
+    def _is_candidate(file_path):
         if not file_path.is_file():
             return False
         if file_path.name.startswith("~$"):

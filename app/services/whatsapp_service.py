@@ -1,15 +1,28 @@
 import json
+import re
 from urllib import error, request
 
 from app.config import get_settings
 
 
+_NON_DIGIT_RE = re.compile(r"\D+")
+
+
+def _normalize_graph_phone(phone):
+    digits = _NON_DIGIT_RE.sub("", phone)
+    return digits
+
+
 def _build_payload(api_url, message, phone):
-    if "graph.facebook.com" in api_url:
+    if "graph.facebook.com" in api_url.lower():
+        normalized_phone = _normalize_graph_phone(phone)
+        if not normalized_phone:
+            raise ValueError("phone is required")
         return {
             "messaging_product": "whatsapp",
-            "to": phone,
+            "to": normalized_phone,
             "type": "text",
+
             "text": {"body": message},
         }
     return {"to": phone, "message": message}
@@ -35,9 +48,12 @@ def _raise_http_error(exc):
 def send_whatsapp(message, phone):
     settings = get_settings()
 
-    if not settings.WHATSAPP_API_URL:
+    api_url = (settings.WHATSAPP_API_URL or "").strip()
+    access_token = (settings.WHATSAPP_ACCESS_TOKEN or "").strip()
+
+    if not api_url:
         raise RuntimeError("WHATSAPP_API_URL is not configured")
-    if not settings.WHATSAPP_ACCESS_TOKEN:
+    if not access_token:
         raise RuntimeError("WHATSAPP_ACCESS_TOKEN is not configured")
 
     if message is None:
@@ -52,17 +68,20 @@ def send_whatsapp(message, phone):
     if not phone:
         raise ValueError("phone is required")
 
-    payload = json.dumps(
-        _build_payload(settings.WHATSAPP_API_URL, message, phone)
-    ).encode("utf-8")
+    payload = json.dumps(_build_payload(api_url, message, phone)).encode("utf-8")
+
+    if access_token.lower().startswith("bearer "):
+        auth_header = access_token
+    else:
+        auth_header = "Bearer {}".format(access_token)
 
     req = request.Request(
-        settings.WHATSAPP_API_URL,
+        api_url,
         data=payload,
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "Authorization": "Bearer {}".format(settings.WHATSAPP_ACCESS_TOKEN),
+            "Authorization": auth_header,
         },
     )
 

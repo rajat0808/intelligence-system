@@ -42,6 +42,9 @@ _SQLITE_COLUMN_DEFAULTS = {
         "supplier_name": "TEXT NOT NULL DEFAULT ''",
         "mrp": "REAL NOT NULL DEFAULT 0",
         "department_name": "TEXT NOT NULL DEFAULT ''",
+        "price": "REAL NOT NULL DEFAULT 0",
+        "created_at": "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "last_price_update": "DATETIME",
     },
     "inventory": {
         "current_price": "REAL NOT NULL DEFAULT 0",
@@ -54,6 +57,7 @@ def ensure_sqlite_schema():
         return
     with engine.connect() as conn:
         with conn.begin():
+            products_exists = False
             for table_name, columns in _SQLITE_COLUMN_DEFAULTS.items():
                 # noinspection SqlNoDataSourceInspection
                 existing_rows = conn.execute(
@@ -62,6 +66,8 @@ def ensure_sqlite_schema():
                 existing = {row["name"] for row in existing_rows}
                 if not existing:
                     continue
+                if table_name == "products":
+                    products_exists = True
                 for column_name, ddl in columns.items():
                     if column_name in existing:
                         continue
@@ -75,3 +81,12 @@ def ensure_sqlite_schema():
                             )
                         )
                     )
+            # Enforce unique style_code at the database level.
+            # Note: this will fail if duplicates already exist.
+            if products_exists:
+                conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS "
+                        "idx_products_style_code_unique ON products(style_code)"
+                    )
+                )

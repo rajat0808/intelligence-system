@@ -19,6 +19,7 @@ from app.routers import (
     health_router,
     ingest_router,
     ml_router,
+    products_router,
     search_router,
     whatsapp_router,
 )
@@ -33,6 +34,7 @@ def _import_models():
         "app.models.inventory",
         "app.models.job_log",
         "app.models.lifecycle",
+        "app.models.price_history",
         "app.models.product",
         "app.models.risk_log",
         "app.models.sales",
@@ -83,6 +85,7 @@ app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(ml_router)
 app.include_router(alerts_router)
+app.include_router(products_router)
 app.include_router(search_router)
 app.include_router(whatsapp_router)
 

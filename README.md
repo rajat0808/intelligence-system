@@ -91,6 +91,8 @@ Optional defaults (see `app/config.py`):
 - `GET /search/inventory` - search inventory
   - query params: `query`, `department` (comma-separated), `store_id`, `danger` (EARLY|HIGH|CRITICAL), `alert_only`
 - `POST /ingest/excel` - trigger Excel import; body: `{"path":"datasource/daily_update.xlsx","sheets":["daily_update"],"dry_run":false}`
+- `GET /products/{style_code}` - product detail with current price, days active, and price history
+- `POST /products/price` - upsert product price by style code (creates if missing)
 - `POST /whatsapp/send` - send a WhatsApp message; body: `{"message":"...","phone":"15551234567"}`
 - `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"item_mrp":4500,"lifecycle_start_date":"2025-01-01"}`
 - `GET /ml/inventory` - ML risk scores from datasource (filters: `store_id`, `product_id`, `category`, `min_risk`, `limit`)

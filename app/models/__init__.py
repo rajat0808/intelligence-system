@@ -6,6 +6,7 @@ from app.models.delivery_logs import DeliveryLog
 from app.models.inventory import Inventory
 from app.models.job_log import JobLog
 from app.models.lifecycle import LifecycleHistory
+from app.models.price_history import PriceHistory
 from app.models.product import Product
 from app.models.risk_log import RiskLog
 from app.models.sales import Sales
@@ -20,6 +21,7 @@ def import_all_models() -> None:
         "app.models.inventory",
         "app.models.job_log",
         "app.models.lifecycle",
+        "app.models.price_history",
         "app.models.product",
         "app.models.risk_log",
         "app.models.sales",
@@ -35,6 +37,7 @@ __all__ = [
     "Inventory",
     "JobLog",
     "LifecycleHistory",
+    "PriceHistory",
     "Product",
     "RiskLog",
     "Sales",
