@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 
 from sqlalchemy import create_engine, event, text
@@ -6,6 +7,7 @@ from app.config import Settings, get_settings
 
 
 settings: Settings = get_settings()
+logger = logging.getLogger(__name__)
 
 is_sqlite = settings.DATABASE_URL.lower().startswith("sqlite")
 connect_args = {}
@@ -43,12 +45,19 @@ _SQLITE_COLUMN_DEFAULTS = {
         "mrp": "REAL NOT NULL DEFAULT 0",
         "department_name": "TEXT NOT NULL DEFAULT ''",
         "price": "REAL NOT NULL DEFAULT 0",
-        "created_at": "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP",
+        "created_at": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
         "last_price_update": "DATETIME",
     },
     "inventory": {
         "current_price": "REAL NOT NULL DEFAULT 0",
     },
+}
+
+_SQLITE_POST_ADD_UPDATES = {
+    ("products", "created_at"): (
+        "UPDATE products SET created_at = CURRENT_TIMESTAMP "
+        "WHERE created_at = '1970-01-01 00:00:00'"
+    ),
 }
 
 
@@ -58,6 +67,7 @@ def ensure_sqlite_schema():
     with engine.connect() as conn:
         with conn.begin():
             products_exists = False
+            added_columns = []
             for table_name, columns in _SQLITE_COLUMN_DEFAULTS.items():
                 # noinspection SqlNoDataSourceInspection
                 existing_rows = conn.execute(
@@ -81,12 +91,63 @@ def ensure_sqlite_schema():
                             )
                         )
                     )
-            # Enforce unique style_code at the database level.
-            # Note: this will fail if duplicates already exist.
-            if products_exists:
-                conn.execute(
-                    text(
-                        "CREATE UNIQUE INDEX IF NOT EXISTS "
-                        "idx_products_style_code_unique ON products(style_code)"
-                    )
+                    added_columns.append((table_name, column_name))
+            for table_name, column_name in added_columns:
+                update_stmt = _SQLITE_POST_ADD_UPDATES.get(
+                    (table_name, column_name)
                 )
+                if update_stmt:
+                    # noinspection SqlNoDataSourceInspection
+                    conn.execute(text(update_stmt))
+            # Enforce unique (store_id, style_code) at the database level.
+            # Note: this will fail if duplicates already exist within a store.
+            if products_exists:
+                has_store_style_unique = False
+                indexes = conn.execute(
+                    text("PRAGMA index_list(products)")
+                ).mappings().all()
+                for index in indexes:
+                    if not index.get("unique"):
+                        continue
+                    index_name = index.get("name")
+                    if not index_name:
+                        continue
+                    columns = [
+                        row["name"]
+                        for row in conn.execute(
+                            text('PRAGMA index_info("{}")'.format(index_name.replace('"', '""')))
+                        ).mappings()
+                    ]
+                    if columns == ["store_id", "style_code"]:
+                        has_store_style_unique = True
+                    if columns == ["style_code"]:
+                        try:
+                            conn.execute(
+                                text(
+                                    'DROP INDEX IF EXISTS "{}"'.format(
+                                        index_name.replace('"', '""')
+                                    )
+                                )
+                            )
+                        except sqlite3.DatabaseError:
+                            logger.warning(
+                                "Unable to drop legacy unique index %s on products.style_code.",
+                                index_name,
+                            )
+                duplicate = conn.execute(
+                    text(
+                        "SELECT store_id, style_code FROM products "
+                        "GROUP BY store_id, style_code HAVING COUNT(*) > 1 LIMIT 1"
+                    )
+                ).fetchone()
+                if duplicate:
+                    logger.warning(
+                        "Skipping unique index on products(store_id, style_code) due to duplicates."
+                    )
+                elif not has_store_style_unique:
+                    conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS "
+                            "idx_products_store_style_unique ON products(store_id, style_code)"
+                        )
+                    )

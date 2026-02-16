@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,14 +16,34 @@ from app.services.product_service import (
 router = APIRouter(prefix="/products", tags=["Products"])
 
 
+def _load_product_by_style(db: Session, style_code: str, store_id: int | None):
+    query = select(Product).where(Product.style_code == style_code)
+    if store_id is not None:
+        product = db.execute(
+            query.where(Product.store_id == store_id)
+        ).scalars().first()
+        return product, None
+    products = db.execute(query.limit(2)).scalars().all()
+    if not products:
+        return None, "not_found"
+    if len(products) > 1:
+        return None, "ambiguous"
+    return products[0], None
+
+
 @router.get("/{style_code}", response_model=ProductReadWithHistory)
-def get_product(style_code: str, db: Session = Depends(get_db)):
-    product = (
-        db.execute(select(Product).where(Product.style_code == style_code))
-        .scalars()
-        .first()
-    )
+def get_product(
+    style_code: str,
+    store_id: int | None = Query(None, description="Filter by store ID"),
+    db: Session = Depends(get_db),
+):
+    product, error = _load_product_by_style(db, style_code, store_id)
     if not product:
+        if error == "ambiguous":
+            raise HTTPException(
+                status_code=400,
+                detail="Multiple products found for style_code. Specify store_id.",
+            )
         raise HTTPException(status_code=404, detail="Product not found.")
 
     history = load_price_history(db, product.id)
@@ -42,11 +62,12 @@ def upsert_product_price(
     if payload.price < 0:
         raise HTTPException(status_code=400, detail="price must be non-negative.")
 
-    product = (
-        db.execute(select(Product).where(Product.style_code == payload.style_code))
-        .scalars()
-        .first()
-    )
+    product, error = _load_product_by_style(db, payload.style_code, payload.store_id)
+    if error == "ambiguous":
+        raise HTTPException(
+            status_code=400,
+            detail="store_id is required when multiple products share a style_code.",
+        )
     if product:
         if payload.barcode is not None:
             product.barcode = payload.barcode

@@ -30,7 +30,7 @@ class Product(Base):
     last_price_update = Column(DateTime(timezone=True))
 
     __table_args__ = (
-        UniqueConstraint("style_code"),
+        UniqueConstraint("store_id", "style_code", name="uq_products_store_style"),
         Index("idx_style", "style_code"),
         Index("idx_barcode", "barcode"),
     )

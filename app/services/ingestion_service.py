@@ -343,10 +343,7 @@ def upsert_product(db, row):
     category = to_str(row.get("category"), "category")
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
-    price_value = row.get("price")
-    price = None
-    if not _is_blank(price_value):
-        price = to_float(price_value, "price")
+    price = parse_optional_price(row)
     department_value = row.get("department_name")
     department_name = None
     if not _is_blank(department_value):
@@ -357,6 +354,7 @@ def upsert_product(db, row):
         Product,
         product_id,
         Product.style_code == style_code,
+        Product.store_id == store_id,
     )
     values = {
         "store_id": store_id,
@@ -372,26 +370,13 @@ def upsert_product(db, row):
     elif not product:
         values["department_name"] = ""
     if product:
-        if product.store_id != store_id:
-            logger.warning(
-                "Style code %s already exists for store %s; received store %s.",
-                style_code,
-                product.store_id,
-                store_id,
-            )
-        for key, value in values.items():
-            if key == "store_id":
-                continue
-            setattr(product, key, value)
+        warn_store_mismatch(product, store_id, style_code)
+        apply_product_updates(product, values)
         if price is not None:
             apply_price_update(db, product, price)
         return "updated"
 
-    if price is None:
-        price = mrp
-    product = Product(**values, price=price)
-    if price is not None:
-        product.last_price_update = datetime.now(timezone.utc)
+    product = build_product(values, mrp, price)
     db.add(product)
     return "inserted"
 
@@ -440,6 +425,39 @@ def resolve_lifecycle_start_date(row):
     return date.today() - timedelta(days=stock_days)
 
 
+def parse_optional_price(row):
+    price_value = row.get("price")
+    if not _is_blank(price_value):
+        return to_float(price_value, "price")
+    return None
+
+
+def warn_store_mismatch(product, store_id, style_code):
+    if product.store_id != store_id:
+        logger.warning(
+            "Style code %s already exists for store %s; received store %s.",
+            style_code,
+            product.store_id,
+            store_id,
+        )
+
+
+def apply_product_updates(product, values):
+    for key, value in values.items():
+        if key == "store_id":
+            continue
+        setattr(product, key, value)
+
+
+def build_product(values, mrp, price):
+    if price is None:
+        price = mrp
+    product = Product(**values, price=price)
+    if price is not None:
+        product.last_price_update = datetime.now(timezone.utc)
+    return product
+
+
 def upsert_product_from_daily_update(db, row):
     store_id = to_int(row.get("store_id"), "store_id")
     ensure_store_exists(db, store_id)
@@ -459,10 +477,7 @@ def upsert_product_from_daily_update(db, row):
     category = to_str(row.get("category"), "category")
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
-    price_value = row.get("price")
-    price = None
-    if not _is_blank(price_value):
-        price = to_float(price_value, "price")
+    price = parse_optional_price(row)
     department_name = to_str(row.get("department_name"), "department_name")
 
     product = get_existing(
@@ -470,6 +485,7 @@ def upsert_product_from_daily_update(db, row):
         Product,
         None,
         Product.style_code == style_code,
+        Product.store_id == store_id,
     )
     values = {
         "store_id": store_id,
@@ -482,25 +498,12 @@ def upsert_product_from_daily_update(db, row):
         "department_name": department_name,
     }
     if product:
-        if product.store_id != store_id:
-            logger.warning(
-                "Style code %s already exists for store %s; received store %s.",
-                style_code,
-                product.store_id,
-                store_id,
-            )
-        for key, value in values.items():
-            if key == "store_id":
-                continue
-            setattr(product, key, value)
+        warn_store_mismatch(product, store_id, style_code)
+        apply_product_updates(product, values)
         if price is not None:
             apply_price_update(db, product, price)
         return "updated", product
-    if price is None:
-        price = mrp
-    product = Product(**values, price=price)
-    if price is not None:
-        product.last_price_update = datetime.now(timezone.utc)
+    product = build_product(values, mrp, price)
     db.add(product)
     db.flush()
     return "inserted", product
