@@ -20,6 +20,9 @@
    * @typedef {Object} DashboardData
    * @property {string=} date
    * @property {number=} store_count
+   * @property {number=} store_count_total
+   * @property {number=} store_count_query
+   * @property {{HEALTHY:number, TRANSFER:number, RR_TT:number, VERY_DANGER:number}=} status_counts
    * @property {DangerSummary[]=} results
    * @property {AgingSummary[]=} aging_results
    */
@@ -69,6 +72,12 @@
    * @property {InventoryItem[]=} results
    */
   /**
+   * @typedef {Object} InventoryStatusResponse
+   * @property {number=} count
+   * @property {boolean=} limited
+   * @property {InventoryItem[]=} results
+   */
+  /**
    * @typedef {Object} FetchResult
    * @property {boolean} ok
    * @property {boolean} unauthorized
@@ -77,15 +86,20 @@
    * @property {any=} error
    */
 
-  /** @type {{ allStores: StoreSummary[], filteredStores: StoreSummary[], agingFilters: Set<string>, live: boolean, liveTimer: number | null, inventoryAlertOnly: boolean, inventoryResults: InventoryItem[] }} */
+  /** @type {{ allStores: StoreSummary[], baseStores: StoreSummary[], filteredStores: StoreSummary[], agingFilters: Set<string>, live: boolean, liveTimer: number | null, inventoryAlertOnly: boolean, inventoryResults: InventoryItem[], filterRequestId: number, filterLoading: boolean, inventoryMode: "manual" | "status", inventoryFilterRequestId: number }} */
   const state = {
     allStores: [],
+    baseStores: [],
     filteredStores: [],
     agingFilters: new Set(),
     live: true,
     liveTimer: null,
     inventoryAlertOnly: false,
     inventoryResults: [],
+    filterRequestId: 0,
+    filterLoading: false,
+    inventoryMode: "manual",
+    inventoryFilterRequestId: 0,
   };
 
   const elements = {
@@ -99,6 +113,7 @@
     emptyState: document.getElementById("empty-state"),
     filterStatus: document.getElementById("filter-status"),
     tableStatus: document.getElementById("table-status"),
+    tablePanel: document.getElementById("table-panel"),
     searchInput: document.getElementById("search-input"),
     filtersPanel: document.getElementById("filters-panel"),
     agingHealthy: document.getElementById("aging-healthy"),
@@ -135,6 +150,7 @@
   };
 
   const numberFormatter = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+  let filterDebounceTimer = null;
 
   const dangerDefaults = { EARLY: 0, HIGH: 0, CRITICAL: 0, total_danger_capital: 0 };
   const agingDefaults = {
@@ -281,6 +297,16 @@
     button.classList.add("clicked");
   }
 
+  function setFilterLoading(isLoading) {
+    state.filterLoading = isLoading;
+    if (elements.tablePanel) {
+      elements.tablePanel.classList.toggle("loading", isLoading);
+    }
+    if (isLoading) {
+      elements.tableStatus.textContent = "Filtering stores...";
+    }
+  }
+
   function updateSummary(stores) {
     const totals = computeTotals(stores);
 
@@ -316,7 +342,7 @@
   function updateHealthInsights(totals) {
     const averageCapital = totals.count > 0 ? totals.aging.total / totals.count : 0;
     const insights = [
-      { label: "Avg capital per store", value: formatNumber(averageCapital) },
+      { label: "Avg inventory value per store", value: formatNumber(averageCapital) },
       { label: "Rate revised stores", value: formatNumber(totals.agingCounts.RR_TT) },
       { label: "Very danger stores", value: formatNumber(totals.agingCounts.VERY_DANGER) },
     ];
@@ -333,6 +359,41 @@
       row.appendChild(value);
       elements.healthInsights.appendChild(row);
     });
+  }
+
+  function computeStatusCounts(stores) {
+    const counts = { HEALTHY: 0, TRANSFER: 0, RR_TT: 0, VERY_DANGER: 0 };
+    stores.forEach((store) => {
+      if (toNumber(store.aging.HEALTHY) > 0) counts.HEALTHY += 1;
+      if (toNumber(store.aging.TRANSFER) > 0) counts.TRANSFER += 1;
+      if (toNumber(store.aging.RR_TT) > 0) counts.RR_TT += 1;
+      if (toNumber(store.aging.VERY_DANGER) > 0) counts.VERY_DANGER += 1;
+    });
+    return counts;
+  }
+
+  function updateFilterCounts(counts) {
+    const source = state.baseStores ?? state.allStores;
+    const resolved = counts ?? computeStatusCounts(source);
+    document.querySelectorAll("[data-count-for]").forEach((node) => {
+      const key = node.dataset.countFor;
+      node.textContent = formatNumber(resolved[key] ?? 0);
+    });
+  }
+
+  function updateAgingFilterButtons() {
+    document.querySelectorAll('[data-filter-group="aging"]').forEach((btn) => {
+      const value = btn.dataset.filter;
+      const active = value ? state.agingFilters.has(value) : false;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function setAgingFilters(nextSet) {
+    state.agingFilters.clear();
+    nextSet.forEach((value) => state.agingFilters.add(value));
+    updateAgingFilterButtons();
   }
 
   function updateSystemHealth(data, latencyMs) {
@@ -413,7 +474,7 @@
     return pill;
   }
 
-  function buildPillGroup(items) {
+  function buildPillGroup(items, storeId) {
     const wrapper = document.createElement("div");
     wrapper.className = "chip-row";
     let hasValues = false;
@@ -421,7 +482,18 @@
       const value = toNumber(item.value);
       if (value <= 0) return;
       hasValues = true;
-      wrapper.appendChild(buildPill(`${item.label} ${formatNumber(value)}`, item.className));
+      if (item.statusKey && storeId !== undefined && storeId !== null) {
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = `pill clickable ${item.className}`;
+        pill.textContent = `${item.label} ${formatNumber(value)}`;
+        pill.dataset.status = item.statusKey;
+        pill.dataset.storeId = String(storeId);
+        pill.setAttribute("aria-label", `${item.label} items for store ${storeId}`);
+        wrapper.appendChild(pill);
+      } else {
+        wrapper.appendChild(buildPill(`${item.label} ${formatNumber(value)}`, item.className));
+      }
     });
     if (!hasValues) {
       wrapper.appendChild(buildPill("None", "none"));
@@ -458,7 +530,7 @@
       bar.classList.add("empty");
       const empty = document.createElement("span");
       empty.className = "bar-empty";
-      empty.textContent = "No capital recorded";
+      empty.textContent = "No inventory value recorded";
       bar.appendChild(empty);
       return bar;
     }
@@ -494,7 +566,7 @@
 
       const totalCell = document.createElement("td");
       totalCell.className = "total";
-      totalCell.dataset.label = "Total capital";
+      totalCell.dataset.label = "Total inventory value";
       totalCell.textContent = formatNumber(store.totalAging);
       row.appendChild(totalCell);
 
@@ -505,11 +577,31 @@
       stack.className = "status-stack";
       stack.appendChild(buildStoreBar(store));
       const pills = buildPillGroup([
-        { label: levelLabels.HEALTHY, value: store.aging.HEALTHY, className: "healthy" },
-        { label: levelLabels.TRANSFER, value: store.aging.TRANSFER, className: "transfer" },
-        { label: levelLabels.RR_TT, value: store.aging.RR_TT, className: "rate-revised" },
-        { label: levelLabels.VERY_DANGER, value: store.aging.VERY_DANGER, className: "very-danger" },
-      ]);
+        {
+          label: levelLabels.HEALTHY,
+          value: store.aging.HEALTHY,
+          className: "healthy",
+          statusKey: "HEALTHY",
+        },
+        {
+          label: levelLabels.TRANSFER,
+          value: store.aging.TRANSFER,
+          className: "transfer",
+          statusKey: "TRANSFER",
+        },
+        {
+          label: levelLabels.RR_TT,
+          value: store.aging.RR_TT,
+          className: "rate-revised",
+          statusKey: "RR_TT",
+        },
+        {
+          label: levelLabels.VERY_DANGER,
+          value: store.aging.VERY_DANGER,
+          className: "very-danger",
+          statusKey: "VERY_DANGER",
+        },
+      ], store.id);
       pills.classList.add("store-pills");
       stack.appendChild(pills);
       statusCell.appendChild(stack);
@@ -562,6 +654,8 @@
   }
 
   async function runInventorySearch() {
+    state.inventoryMode = "manual";
+    state.inventoryFilterRequestId += 1;
     const query = elements.inventoryQuery.value.trim();
     const storeId = elements.inventoryStore.value.trim();
 
@@ -611,13 +705,81 @@
     }
   }
 
-  function applyFilters() {
-    const query = elements.searchInput.value.trim().toLowerCase();
-    const agingActive = state.agingFilters.size > 0;
+  function formatStatusLabel(status) {
+    return levelLabels[status] ?? status;
+  }
 
-    state.filteredStores = state.allStores.filter((store) => {
-      if (query && !store.id.toLowerCase().includes(query)) {
-        return false;
+  async function syncInventoryWithFilters(activeFilters, storeQuery) {
+    if (!activeFilters.length) {
+      if (state.inventoryMode === "status") {
+        resetInventoryResults("Select a status filter to view item details.");
+      }
+      state.inventoryMode = "manual";
+      return;
+    }
+
+    const requestId = ++state.inventoryFilterRequestId;
+    state.inventoryMode = "status";
+
+    const params = new URLSearchParams();
+    params.set("status", activeFilters.join(","));
+    const storeQueryValue = storeQuery ? storeQuery.trim() : "";
+    if (storeQueryValue) {
+      if (/^\d+$/.test(storeQueryValue)) {
+        params.set("store_id", storeQueryValue);
+      } else {
+        params.set("query", storeQueryValue);
+      }
+    }
+    params.set("limit", "200");
+
+    elements.inventoryStatus.textContent = "Loading items for selected status...";
+
+    try {
+      const result = await fetchJsonWithAuth(`/dashboard/inventory-by-status?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (requestId !== state.inventoryFilterRequestId) {
+        return;
+      }
+      if (result.unauthorized) {
+        return;
+      }
+      if (!result.ok || !result.data) {
+        resetInventoryResults("Failed to load filtered items.");
+        logResultError(result);
+        return;
+      }
+      const data = /** @type {InventoryStatusResponse} */ (result.data ?? {});
+      const results = Array.isArray(data.results) ? data.results : [];
+      state.inventoryResults = results;
+      renderInventoryResults(results);
+      const labels = activeFilters.map(formatStatusLabel).join(", ");
+      const storePart = storeQuery ? ` for stores matching "${storeQuery}"` : "";
+      const limitedNote = data.limited ? " Showing first 200 items." : "";
+      elements.inventoryStatus.textContent = `Found ${data.count ?? results.length} ${labels} items${storePart}.${limitedNote}`;
+    } catch (error) {
+      if (requestId !== state.inventoryFilterRequestId) {
+        return;
+      }
+      resetInventoryResults("Failed to load filtered items.");
+      console.error(error);
+    }
+  }
+
+  function applyLocalFilters(query) {
+    const agingActive = state.agingFilters.size > 0;
+    const queryIsNumeric = !!query && /^\d+$/.test(query);
+    return state.allStores.filter((store) => {
+      if (query) {
+        const storeText = store.id.toLowerCase();
+        if (queryIsNumeric) {
+          if (storeText !== query) {
+            return false;
+          }
+        } else if (!storeText.includes(query)) {
+          return false;
+        }
       }
       if (agingActive) {
         const matchesAging = Array.from(state.agingFilters).some(
@@ -627,21 +789,110 @@
       }
       return true;
     });
+  }
 
-    renderTable(state.filteredStores);
-    updateSummary(state.filteredStores);
+  async function applyFilters() {
+    const queryValue = elements.searchInput.value.trim();
+    const query = queryValue.toLowerCase();
+    const activeFilters = Array.from(state.agingFilters);
+    const hasFilters = activeFilters.length > 0 || !!query;
+    const requestId = ++state.filterRequestId;
 
-    const totalCount = state.allStores.length;
-    const filteredCount = state.filteredStores.length;
-    const activeFilters = state.agingFilters.size;
-    const statusParts = [`Showing ${filteredCount} of ${totalCount} stores`];
-    if (activeFilters > 0) statusParts.push(`${activeFilters} status tags active`);
+    if (!hasFilters) {
+      setFilterLoading(false);
+      state.baseStores = [...state.allStores];
+      state.filteredStores = [...state.allStores];
+      renderTable(state.filteredStores);
+      updateSummary(state.filteredStores);
+      updateFilterCounts();
+
+      const totalCount = state.allStores.length;
+      const filteredCount = state.filteredStores.length;
+      const statusParts = [`Showing ${filteredCount} of ${totalCount} stores`];
+      elements.filterStatus.textContent = statusParts.join(". ") + ".";
+      elements.tableStatus.textContent = filteredCount === 0 ? "No stores match the current filters." : "Ready.";
+
+      elements.emptyState.hidden = filteredCount !== 0;
+      elements.filtersPanel.classList.toggle("filters-open", false);
+      void syncInventoryWithFilters(activeFilters, queryValue);
+      return;
+    }
+
+    setFilterLoading(true);
+    elements.filterStatus.textContent = "Filtering stores...";
+
+    const params = new URLSearchParams();
+    if (queryValue) params.set("query", queryValue);
+    if (activeFilters.length) params.set("status", activeFilters.join(","));
+
+    const result = await fetchJsonWithAuth(`/dashboard/store-danger-summary?${params.toString()}`, {
+      cache: "no-store",
+    });
+
+    if (requestId !== state.filterRequestId) {
+      return;
+    }
+
+    setFilterLoading(false);
+
+    if (result.unauthorized) {
+      return;
+    }
+
+    if (!result.ok || !result.data) {
+      const fallback = applyLocalFilters(query);
+      state.baseStores = fallback;
+      state.filteredStores = fallback;
+      renderTable(state.filteredStores);
+      updateSummary(state.filteredStores);
+      updateFilterCounts();
+      const totalCount = state.allStores.length;
+      const filteredCount = state.filteredStores.length;
+      const statusParts = [`Showing ${filteredCount} of ${totalCount} stores`];
+      if (activeFilters.length) statusParts.push(`${activeFilters.length} status tags active`);
+      if (query) statusParts.push("Search active");
+      elements.filterStatus.textContent = statusParts.join(". ") + ".";
+      elements.tableStatus.textContent =
+        filteredCount === 0 ? "No stores match the current filters." : "Showing cached results.";
+      elements.emptyState.hidden = filteredCount !== 0;
+      elements.filtersPanel.classList.toggle("filters-open", true);
+      showToast("Filters failed, showing cached data", "error");
+      logResultError(result);
+      void syncInventoryWithFilters(activeFilters, queryValue);
+      return;
+    }
+
+    const data = result.data ?? {};
+    const stores = buildStoreList(data);
+    state.baseStores = stores;
+    state.filteredStores = stores;
+    renderTable(stores);
+    updateSummary(stores);
+    updateFilterCounts(data.status_counts);
+
+    const totalCount = Number.isFinite(data.store_count_total)
+      ? data.store_count_total
+      : state.allStores.length;
+    const queryCount = Number.isFinite(data.store_count_query) ? data.store_count_query : totalCount;
+    const filteredCount = stores.length;
+    const statusParts = [`Showing ${filteredCount} of ${query ? queryCount : totalCount} stores`];
+    if (activeFilters.length) statusParts.push(`${activeFilters.length} status tags active`);
     if (query) statusParts.push("Search active");
     elements.filterStatus.textContent = statusParts.join(". ") + ".";
     elements.tableStatus.textContent = filteredCount === 0 ? "No stores match the current filters." : "Ready.";
 
     elements.emptyState.hidden = filteredCount !== 0;
-    elements.filtersPanel.classList.toggle("filters-open", activeFilters > 0 || !!query);
+    elements.filtersPanel.classList.toggle("filters-open", true);
+    void syncInventoryWithFilters(activeFilters, queryValue);
+  }
+
+  function scheduleApplyFilters() {
+    if (filterDebounceTimer) {
+      window.clearTimeout(filterDebounceTimer);
+    }
+    filterDebounceTimer = window.setTimeout(() => {
+      void applyFilters();
+    }, 220);
   }
 
   function escapeCsv(value) {
@@ -758,7 +1009,7 @@
       const data = /** @type {DashboardData} */ (result.data ?? {});
       state.allStores = buildStoreList(data);
       elements.lastUpdated.textContent = data?.date ? String(data.date) : "unknown";
-      applyFilters();
+      void applyFilters();
       elements.tableStatus.textContent = `Updated ${new Date().toLocaleTimeString()}.`;
       if (showNotice) {
         showToast("Dashboard refreshed", "success");
@@ -771,41 +1022,48 @@
   }
 
   function resetFilters() {
-    state.agingFilters.clear();
+    setAgingFilters(new Set());
     elements.searchInput.value = "";
-    document.querySelectorAll("[data-filter-group]").forEach((button) => {
-      button.classList.remove("active");
-    });
-    applyFilters();
+    void applyFilters();
   }
 
   function bindEvents() {
-    elements.searchInput.addEventListener("input", applyFilters);
+    elements.searchInput.addEventListener("input", scheduleApplyFilters);
 
     document.querySelectorAll("[data-filter-group]").forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
         const group = button.dataset.filterGroup;
         const value = button.dataset.filter;
         if (group !== "aging" || !value) return;
-        const targetSet = state.agingFilters;
-        const buttons = document.querySelectorAll('[data-filter-group="aging"]');
-        if (targetSet.has(value) && targetSet.size === 1) {
-          targetSet.clear();
-          buttons.forEach((btn) => btn.classList.remove("active"));
-        } else {
-          targetSet.clear();
-          buttons.forEach((btn) => btn.classList.remove("active"));
-          targetSet.add(value);
-          button.classList.add("active");
+        const isMulti = event.shiftKey || event.ctrlKey || event.metaKey;
+        const alreadyActive = state.agingFilters.has(value);
+
+        if (!isMulti) {
+          if (alreadyActive) {
+            setAgingFilters(new Set());
+            scheduleApplyFilters();
+            return;
+          }
+          setAgingFilters(new Set([value]));
+          scheduleApplyFilters();
+          return;
         }
-        applyFilters();
+
+        const nextSet = new Set(state.agingFilters);
+        if (alreadyActive) {
+          nextSet.delete(value);
+        } else {
+          nextSet.add(value);
+        }
+        setAgingFilters(nextSet);
+        scheduleApplyFilters();
       });
     });
 
     if (elements.applyFiltersBtn) {
       elements.applyFiltersBtn.addEventListener("click", () => {
         flashAction(elements.applyFiltersBtn);
-        applyFilters();
+        void applyFilters();
       });
     }
 
@@ -850,6 +1108,20 @@
       showToast("Filters cleared", "success");
     });
 
+    if (elements.tableBody) {
+      elements.tableBody.addEventListener("click", (event) => {
+        const pill = event.target.closest(".pill[data-status][data-store-id]");
+        if (!pill) return;
+        const status = pill.dataset.status;
+        const storeId = pill.dataset.storeId;
+        if (!status || !storeId) return;
+        elements.searchInput.value = storeId;
+        elements.inventoryStore.value = storeId;
+        setAgingFilters(new Set([status]));
+        scheduleApplyFilters();
+      });
+    }
+
     elements.liveToggle.addEventListener("click", () => {
       setLiveState(!state.live);
     });
@@ -861,7 +1133,7 @@
     if (seed) {
       state.allStores = buildStoreList(seed);
       elements.lastUpdated.textContent = seed?.date ? String(seed.date) : "unknown";
-      applyFilters();
+      void applyFilters();
     } else {
       elements.filterStatus.textContent = "Loading store data...";
       elements.tableStatus.textContent = "Loading store data...";

@@ -51,7 +51,7 @@
           <div class="title">
             <div class="subtitle">Sindh Fashion Inventory</div>
             <h1>Store Health Dashboard</h1>
-            <div class="subtitle tagline">Capital status and aging mix across stores.</div>
+            <div class="subtitle tagline">Inventory value status and aging mix across stores.</div>
           </div>
           <div class="controls">
             <div class="chip tag">Stores: <span id="store-count">--</span></div>
@@ -105,22 +105,22 @@
 
         <section class="grid">
           <div class="card" style="--delay: 0ms;">
-            <h2>Healthy capital</h2>
+            <h2>Healthy inventory value</h2>
             <div class="value" id="healthy-capital">--</div>
-            <div class="note">Capital tagged healthy.</div>
+            <div class="note">Inventory value tagged healthy.</div>
           </div>
           <div class="card" style="--delay: 80ms;">
-            <h2>Transfer capital</h2>
+            <h2>Transfer inventory value</h2>
             <div class="value" id="transfer-capital">--</div>
             <div class="note">Items moving across stores.</div>
           </div>
           <div class="card" style="--delay: 160ms;">
-            <h2>Rate revised capital</h2>
+            <h2>Rate revised inventory value</h2>
             <div class="value" id="rate-revised-capital">--</div>
             <div class="note">Revised-rate tagged items.</div>
           </div>
           <div class="card" style="--delay: 240ms;">
-            <h2>Very danger capital</h2>
+            <h2>Very danger inventory value</h2>
             <div class="value" id="very-danger-capital">--</div>
             <div class="note">High priority status.</div>
           </div>
@@ -180,7 +180,7 @@
         <section class="panel" id="aging-panel">
           <header>
             <h2 class="panel-title">Status mix</h2>
-            <div class="panel-sub">Capital split by status classification.</div>
+            <div class="panel-sub">Inventory value split by status classification.</div>
           </header>
           <div class="health-grid">
             <div class="health-item" data-aging="HEALTHY">
@@ -232,13 +232,17 @@
               <div class="filter-row">
                 <span class="filter-label">Status</span>
                 <div class="chip-row">
-                  <button class="chip toggle" data-filter-group="aging" data-filter="HEALTHY" type="button">Healthy</button>
-                  <button class="chip toggle" data-filter-group="aging" data-filter="TRANSFER" type="button">Transfer</button>
-                  <button class="chip toggle" data-filter-group="aging" data-filter="RR_TT" type="button">
-                    Rate revised
+                  <button class="chip toggle" data-filter-group="aging" data-filter="HEALTHY" type="button" aria-pressed="false">
+                    Healthy <span class="chip-count" data-count-for="HEALTHY">--</span>
                   </button>
-                  <button class="chip toggle" data-filter-group="aging" data-filter="VERY_DANGER" type="button">
-                    Very danger
+                  <button class="chip toggle" data-filter-group="aging" data-filter="TRANSFER" type="button" aria-pressed="false">
+                    Transfer <span class="chip-count" data-count-for="TRANSFER">--</span>
+                  </button>
+                  <button class="chip toggle" data-filter-group="aging" data-filter="RR_TT" type="button" aria-pressed="false">
+                    Rate revised <span class="chip-count" data-count-for="RR_TT">--</span>
+                  </button>
+                  <button class="chip toggle" data-filter-group="aging" data-filter="VERY_DANGER" type="button" aria-pressed="false">
+                    Very danger <span class="chip-count" data-count-for="VERY_DANGER">--</span>
                   </button>
                 </div>
               </div>
@@ -253,13 +257,13 @@
         <section class="panel search-panel" id="table-panel">
           <header>
             <h2 class="panel-title">Store status breakdown</h2>
-            <div class="panel-sub">Capital status by store.</div>
+            <div class="panel-sub">Inventory value status by store.</div>
           </header>
           <table class="store-table">
             <thead>
               <tr>
                 <th>Store</th>
-                <th>Total capital</th>
+                <th>Total inventory value</th>
                 <th>Status mix</th>
               </tr>
             </thead>
