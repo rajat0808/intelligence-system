@@ -46,6 +46,18 @@ def _import_models():
 setup_logging()
 settings: Settings = get_settings()
 
+
+def _resolve_session_secret(app_settings: Settings) -> str:
+    secret = app_settings.DASHBOARD_SESSION_SECRET or app_settings.JWT_SECRET
+    if secret:
+        return secret
+    if app_settings.ENVIRONMENT.lower() == "local":
+        return secrets.token_urlsafe(32)
+    raise RuntimeError(
+        "ENVIRONMENT=production requires DASHBOARD_SESSION_SECRET or JWT_SECRET so "
+        "dashboard sessions persist across restarts."
+    )
+
 _import_models()
 Base.metadata.create_all(bind=engine)
 ensure_sqlite_schema()
@@ -72,7 +84,7 @@ app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
 app.state.templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.DASHBOARD_SESSION_SECRET or settings.JWT_SECRET or secrets.token_urlsafe(32),
+    secret_key=_resolve_session_secret(settings),
     session_cookie=settings.DASHBOARD_SESSION_COOKIE,
     same_site="lax",
     https_only=settings.ENVIRONMENT.lower() != "local",

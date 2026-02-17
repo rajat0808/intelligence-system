@@ -58,6 +58,11 @@ python -m pip install -e .
 Settings load from environment variables or a `.env` file in the repo root.
 Copy `.env.example` to `.env` and update values as needed.
 
+Production requirements:
+- Set `ENVIRONMENT=production`.
+- Set `DASHBOARD_SESSION_SECRET` (or `JWT_SECRET`) to a stable value, otherwise dashboard
+  sessions reset on every restart.
+
 Required for WhatsApp alerts:
 - `WHATSAPP_API_URL`
 - `WHATSAPP_ACCESS_TOKEN`
@@ -117,10 +122,16 @@ The FastAPI app watches `datasource/` and auto-imports any new or updated `.xlsx
 - The folder is created automatically if it does not exist.
 
 Sheets (case-insensitive):
-- `daily_update`: `store_id`, `supplier_name`, `stock_days`, `style_code`, `department_name`, `category_name`, `item_mrp`
+- `daily_update`: `store_id`, `supplier_name`, `stock_days`, `style_code`, `department_name`, `category_name`, `item_mrp`, `image` (optional)
 - `stores`: `id` (optional), `name`, `city`
-- `products`: `id` (optional), `store_id`, `style_code`, `barcode`, `article_name`, `category`, `department_name` (optional), `supplier_name`, `mrp`
+- `products`: `id` (optional), `store_id`, `style_code`, `barcode`, `article_name`, `category`, `department_name` (optional), `supplier_name`, `image` (optional), `mrp`
 - `inventory`: `id` (optional), `store_id`, `product_id`, `quantity`, `item_mrp`, `current_price`, `lifecycle_start_date` (YYYY-MM-DD)
+
+Images:
+- Place product images in `app/static/images/` (e.g. `ABC123.jpg`).
+- If `image` is blank, the importer auto-matches by `style_code` or `barcode` to a file in `app/static/images/`.
+- If `image` is provided, it can be a filename like `ABC123.jpg` (no URL required).
+- Embedded images in the `image` column are extracted on import and saved to `app/static/images/`.
 
 Template:
 - Copy `datasource/daily_update_template.xlsx` to `datasource/daily_update.xlsx` and fill it daily.

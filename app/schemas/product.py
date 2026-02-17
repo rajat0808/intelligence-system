@@ -12,6 +12,7 @@ class ProductBase(BaseModel):
     category: str
     department_name: Optional[str] = ""
     supplier_name: str
+    image_url: Optional[str] = None
     mrp: float
 
 
@@ -42,6 +43,7 @@ class ProductPriceOverride(BaseModel):
     category: Optional[str] = None
     department_name: Optional[str] = None
     supplier_name: Optional[str] = None
+    image_url: Optional[str] = None
     mrp: Optional[float] = None
 
 

@@ -79,6 +79,8 @@ def upsert_product_price(
             product.department_name = payload.department_name
         if payload.supplier_name is not None:
             product.supplier_name = payload.supplier_name
+        if payload.image_url is not None:
+            product.image_url = payload.image_url
         if payload.mrp is not None:
             product.mrp = payload.mrp
         apply_price_update(db, product, payload.price)
@@ -109,6 +111,7 @@ def upsert_product_price(
             category=payload.category,
             department_name=payload.department_name or "",
             supplier_name=payload.supplier_name,
+            image_url=payload.image_url,
             mrp=payload.mrp,
             price=payload.price,
             last_price_update=datetime.now(timezone.utc),

@@ -2,6 +2,7 @@ import json
 from datetime import date
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
 from app.core.aging_rules import classify_status_with_default
@@ -184,8 +185,7 @@ def run_alerts(*, send_notifications=True):
                     sent_alerts.add(alert_key)
 
         db.commit()
-    # noinspection PyBroadException
-    except Exception:
+    except SQLAlchemyError:
         db.rollback()
         raise
     finally:

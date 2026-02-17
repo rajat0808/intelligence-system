@@ -19,6 +19,7 @@ class Product(Base):
     department_name = Column(String, nullable=False, default="")
 
     supplier_name = Column(String, nullable=False)
+    image_url = Column(String)
     mrp = Column(Float, nullable=False)
     price = Column(Float, nullable=False, default=0)
 

@@ -10,6 +10,7 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
+from app.core.constants import STATIC_DIR
 from app.database import Base, SessionLocal, engine, ensure_sqlite_schema
 from app.models.inventory import Inventory
 from app.models.product import Product
@@ -18,11 +19,93 @@ from app.services.product_service import apply_price_update
 
 logger = logging.getLogger(__name__)
 
+_IMAGE_DIR = STATIC_DIR / "images"
+_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+_IMAGE_INDEX_CACHE: dict[str, object] = {"mtime": None, "index": {}}
+
+
+def _find_header_index(header_keys, target):
+    for idx, key in enumerate(header_keys):
+        if key == target:
+            return idx
+    return None
+
+
+def _sanitize_image_basename(value):
+    if not value:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    sanitized = []
+    for char in text:
+        if char.isalnum() or char in ("-", "_", "."):
+            sanitized.append(char)
+        else:
+            sanitized.append("_")
+    return "".join(sanitized).strip("_.")
+
+
+def _image_extension_from_format(image_format):
+    if not image_format:
+        return ".jpg"
+    fmt = str(image_format).strip().lower()
+    if fmt in {"jpg", "jpeg"}:
+        return ".jpg"
+    if fmt in {"png", "webp"}:
+        return f".{fmt}"
+    return ".jpg"
+
+
+def _extract_embedded_images(worksheet, header_keys):
+    image_col = _find_header_index(header_keys, "image_url")
+    if image_col is None:
+        return {}
+    style_col = _find_header_index(header_keys, "style_code")
+    images = getattr(worksheet, "_images", []) or []
+    if not images:
+        return {}
+    _IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    image_map = {}
+    for image in images:
+        anchor = getattr(image, "anchor", None)
+        if not anchor or not hasattr(anchor, "_from"):
+            continue
+        cell_from = anchor._from
+        col = getattr(cell_from, "col", None)
+        row = getattr(cell_from, "row", None)
+        if col is None or row is None:
+            continue
+        if col != image_col:
+            continue
+        row_idx = row + 1
+        style_value = None
+        if style_col is not None:
+            style_value = worksheet.cell(row=row_idx, column=style_col + 1).value
+        base_name = _sanitize_image_basename(style_value) or f"row_{row_idx}"
+        extension = _image_extension_from_format(getattr(image, "format", None))
+        filename = f"{base_name}{extension}"
+        try:
+            data = image._data()
+        except Exception:
+            continue
+        if not data:
+            continue
+        try:
+            (_IMAGE_DIR / filename).write_bytes(data)
+        except OSError:
+            continue
+        image_map[row_idx] = f"/static/images/{filename}"
+    return image_map
+
 _ALIAS_SPECS = (
     (("store", "id"), "store_id"),
     (("product", "id"), "product_id"),
     (("style", "code"), "style_code"),
     (("article", "name"), "article_name"),
+    (("image", "url"), "image_url"),
+    (("image", "link"), "image_url"),
+    (("image",), "image_url"),
     (("supplier", "name"), "supplier_name"),
     (("department", "name"), "department_name"),
     (("category", "name"), "category"),
@@ -265,6 +348,7 @@ def load_sheet_rows(worksheet):
     header_keys = [normalize_header(header) for header in headers]
     indices = [(idx, key) for idx, key in enumerate(header_keys) if key]
     columns = {key for key in header_keys if key}
+    embedded_images = _extract_embedded_images(worksheet, header_keys)
     store_idx = None
     for idx, key in indices:
         if key == "store_id":
@@ -272,7 +356,7 @@ def load_sheet_rows(worksheet):
             break
 
     rows = []
-    for row in rows_iter:
+    for row_idx, row in enumerate(rows_iter, start=2):
         if row is None or all(_is_blank(value) for value in row):
             continue
         if _looks_like_header_row(row, columns):
@@ -286,6 +370,10 @@ def load_sheet_rows(worksheet):
             if _is_footer_value(store_value):
                 continue
         record = {key: row[idx] for idx, key in indices}
+        if embedded_images:
+            image_value = embedded_images.get(row_idx)
+            if image_value and _is_blank(record.get("image_url")):
+                record["image_url"] = image_value
         rows.append(record)
     return rows, columns
 
@@ -344,6 +432,7 @@ def upsert_product(db, row):
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
     price = parse_optional_price(row)
+    image_url, image_explicit = resolve_image_url(row)
     department_value = row.get("department_name")
     department_name = None
     if not _is_blank(department_value):
@@ -365,6 +454,9 @@ def upsert_product(db, row):
         "supplier_name": supplier_name,
         "mrp": mrp,
     }
+    if image_url is not None:
+        if image_explicit or not product or not product.image_url:
+            values["image_url"] = image_url
     if department_name is not None:
         values["department_name"] = department_name
     elif not product:
@@ -432,6 +524,76 @@ def parse_optional_price(row):
     return None
 
 
+def _build_image_index():
+    if not _IMAGE_DIR.exists():
+        return {}
+    index: dict[str, str] = {}
+    for path in _IMAGE_DIR.iterdir():
+        if not path.is_file():
+            continue
+        ext = path.suffix.lower()
+        if ext not in _IMAGE_EXTENSIONS:
+            continue
+        filename = path.name
+        index[filename.lower()] = filename
+        index[path.stem.lower()] = filename
+    return index
+
+
+def _get_image_index():
+    if not _IMAGE_DIR.exists():
+        return {}
+    try:
+        mtime = _IMAGE_DIR.stat().st_mtime_ns
+    except OSError:
+        return {}
+    cached_mtime = _IMAGE_INDEX_CACHE.get("mtime")
+    if cached_mtime != mtime:
+        _IMAGE_INDEX_CACHE["index"] = _build_image_index()
+        _IMAGE_INDEX_CACHE["mtime"] = mtime
+    return _IMAGE_INDEX_CACHE.get("index") or {}
+
+
+def _normalize_image_value(value, image_index):
+    if _is_blank(value):
+        return None
+    cleaned = to_str(value, "image_url", required=False)
+    if not cleaned:
+        return None
+    cleaned = cleaned.replace("\\", "/")
+    lower_value = cleaned.lower()
+    if lower_value.startswith(("http://", "https://", "data:", "/")):
+        return cleaned
+    if lower_value.startswith("static/"):
+        return f"/{cleaned}"
+    if lower_value.startswith("images/"):
+        return f"/static/{cleaned}"
+    filename = image_index.get(lower_value)
+    if not filename:
+        filename = image_index.get(Path(cleaned).stem.lower())
+    if filename:
+        return f"/static/images/{filename}"
+    if Path(cleaned).suffix:
+        return f"/static/images/{cleaned}"
+    return None
+
+
+def resolve_image_url(row):
+    image_index = _get_image_index()
+    explicit_value = row.get("image_url")
+    if not _is_blank(explicit_value):
+        return _normalize_image_value(explicit_value, image_index), True
+    for key in ("style_code", "barcode"):
+        candidate = row.get(key)
+        if _is_blank(candidate):
+            continue
+        lookup_key = str(candidate).strip().lower()
+        filename = image_index.get(lookup_key)
+        if filename:
+            return f"/static/images/{filename}", False
+    return None, False
+
+
 def warn_store_mismatch(product, store_id, style_code):
     if product.store_id != store_id:
         logger.warning(
@@ -478,6 +640,7 @@ def upsert_product_from_daily_update(db, row):
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
     price = parse_optional_price(row)
+    image_url, image_explicit = resolve_image_url(row)
     department_name = to_str(row.get("department_name"), "department_name")
 
     product = get_existing(
@@ -497,6 +660,9 @@ def upsert_product_from_daily_update(db, row):
         "mrp": mrp,
         "department_name": department_name,
     }
+    if image_url is not None:
+        if image_explicit or not product or not product.image_url:
+            values["image_url"] = image_url
     if product:
         warn_store_mismatch(product, store_id, style_code)
         apply_product_updates(product, values)

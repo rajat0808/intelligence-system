@@ -958,6 +958,16 @@
         margin-top: 4px;
       }
 
+      .item-thumb {
+        width: 44px;
+        height: 44px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid var(--stroke-100);
+        background: var(--maroon-200);
+        display: block;
+      }
+
       .login-shell {
         min-height: 100vh;
         display: flex;

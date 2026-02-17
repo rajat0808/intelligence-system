@@ -179,8 +179,15 @@ def store_danger_summary(status_filters=None, store_query=None):
 
 def inventory_by_status(status_filters=None, store_query=None, store_id=None, limit=200):
     normalized_filters = _normalize_status_filters(status_filters)
-    if not normalized_filters:
-        return {"count": 0, "results": [], "limited": False}
+    if not normalized_filters and not store_query and store_id is None:
+        return {
+            "count": 0,
+            "results": [],
+            "limited": False,
+            "total_count": 0,
+            "total_qty": 0,
+            "total_value": 0.0,
+        }
 
     query_text = str(store_query).strip().lower() if store_query else ""
     query_is_numeric = query_text.isdigit() if query_text else False
@@ -195,6 +202,7 @@ def inventory_by_status(status_filters=None, store_query=None, store_id=None, li
             p.category,
             p.department_name,
             p.supplier_name,
+            p.image_url,
             p.mrp,
             i.store_id,
             i.quantity,
@@ -230,7 +238,7 @@ def inventory_by_status(status_filters=None, store_query=None, store_id=None, li
             continue
 
         aging_status = classify_status_with_default(row["category"], age_days)
-        if aging_status not in normalized_filters:
+        if normalized_filters and aging_status not in normalized_filters:
             continue
 
         key = (store_value, row.get("style_code"), aging_status)
@@ -251,6 +259,7 @@ def inventory_by_status(status_filters=None, store_query=None, store_id=None, li
             "category": row.get("category"),
             "department_name": row.get("department_name"),
             "supplier_name": row.get("supplier_name"),
+            "image_url": row.get("image_url"),
             "store_id": store_value,
             "quantity": row.get("quantity") or 0,
             "age_days": age_days,
@@ -258,11 +267,25 @@ def inventory_by_status(status_filters=None, store_query=None, store_id=None, li
             "item_mrp": mrp_value,
             "aging_status": aging_status,
         }
-        results.append(item)
         seen[key] = item
-
-        if len(results) >= limit:
+        if len(results) < limit:
+            results.append(item)
+        else:
             limited = True
-            break
 
-    return {"count": len(results), "results": results, "limited": limited}
+    total_qty = 0
+    total_value = 0.0
+    for entry in seen.values():
+        qty = entry.get("quantity") or 0
+        mrp_value = entry.get("item_mrp") or 0.0
+        total_qty += qty
+        total_value += qty * mrp_value
+
+    return {
+        "count": len(results),
+        "results": results,
+        "limited": limited,
+        "total_count": len(seen),
+        "total_qty": total_qty,
+        "total_value": total_value,
+    }

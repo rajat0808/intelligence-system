@@ -9,6 +9,8 @@ from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
+_SCHEDULED_JOB_EXCEPTIONS = (OSError, RuntimeError, ValueError)
+
 
 def _parse_time(value: str) -> time:
     parts = value.strip().split(":")
@@ -124,8 +126,7 @@ class Scheduler:
     def _safe_run(job: ScheduledJob) -> None:
         try:
             job.func()
-        # noinspection PyBroadException
-        except Exception:
+        except _SCHEDULED_JOB_EXCEPTIONS:
             logger.exception("Scheduled job failed: %s", job.name)
 
     def _run(self) -> None:

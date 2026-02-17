@@ -24,8 +24,7 @@ def send_message(payload: WhatsAppSendRequest, _auth=Depends(require_auth)):
 
     try:
         send_whatsapp(message, phone)
-    # noinspection PyBroadException
-    except Exception as exc:
+    except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return {"status": "sent", "phone": phone}

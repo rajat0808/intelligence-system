@@ -50,6 +50,7 @@
    */
   /**
    * @typedef {Object} InventoryItem
+   * @property {string=} image_url
    * @property {string=} style_code
    * @property {string=} article_name
    * @property {string=} category
@@ -75,6 +76,9 @@
    * @typedef {Object} InventoryStatusResponse
    * @property {number=} count
    * @property {boolean=} limited
+   * @property {number=} total_count
+   * @property {number=} total_qty
+   * @property {number=} total_value
    * @property {InventoryItem[]=} results
    */
   /**
@@ -617,6 +621,23 @@
     items.forEach((item) => {
       const row = document.createElement("tr");
 
+      const imageCell = document.createElement("td");
+      imageCell.dataset.label = "Image";
+      const image = document.createElement("img");
+      image.className = "item-thumb";
+      const imageUrl = item.image_url ?? item.image ?? item.thumbnail;
+      const fallbackUrl = "/static/sindh-logo.png";
+      image.src = imageUrl || fallbackUrl;
+      image.alt = item.article_name ?? item.style_code ?? "Item image";
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.onerror = () => {
+        image.onerror = null;
+        image.src = fallbackUrl;
+      };
+      imageCell.appendChild(image);
+      row.appendChild(imageCell);
+
       const cells = [
         { label: "Style", value: item.style_code ?? "--" },
         { label: "Article", value: item.article_name ?? "--" },
@@ -653,18 +674,33 @@
     elements.inventoryEmpty.hidden = true;
   }
 
+  function computeInventoryTotals(items) {
+    let totalQty = 0;
+    let totalValue = 0;
+    items.forEach((item) => {
+      const qty = toNumber(item.quantity ?? item.qty);
+      const mrpValue = toNumber(item.item_mrp ?? item.mrp);
+      totalQty += qty;
+      totalValue += qty * mrpValue;
+    });
+    return { count: items.length, qty: totalQty, value: totalValue };
+  }
+
   async function runInventorySearch() {
     state.inventoryMode = "manual";
     state.inventoryFilterRequestId += 1;
     const query = elements.inventoryQuery.value.trim();
     const storeId = elements.inventoryStore.value.trim();
 
-    if (query.length < 2) {
-      resetInventoryResults("Enter at least 2 characters to search inventory.");
+    if (query.length < 2 && !storeId) {
+      resetInventoryResults("Enter at least 2 characters or a store id to search inventory.");
       return;
     }
 
-    const params = new URLSearchParams({ query });
+    const params = new URLSearchParams();
+    if (query) {
+      params.set("query", query);
+    }
     if (storeId) {
       params.set("store_id", storeId);
     }
@@ -698,7 +734,10 @@
       const results = Array.isArray(data.results) ? data.results : [];
       state.inventoryResults = results;
       renderInventoryResults(results);
-      elements.inventoryStatus.textContent = `Found ${data.count ?? results.length} items.`;
+      const totals = computeInventoryTotals(results);
+      elements.inventoryStatus.textContent = `Found ${data.count ?? results.length} items. Total qty ${formatNumber(
+        totals.qty
+      )}. Total value ${formatNumber(totals.value)}.`;
     } catch (error) {
       resetInventoryResults("Inventory search failed.");
       console.error(error);
@@ -710,7 +749,9 @@
   }
 
   async function syncInventoryWithFilters(activeFilters, storeQuery) {
-    if (!activeFilters.length) {
+    const storeQueryValue = storeQuery ? storeQuery.trim() : "";
+    const hasStatusFilters = activeFilters.length > 0;
+    if (!hasStatusFilters && !storeQueryValue) {
       if (state.inventoryMode === "status") {
         resetInventoryResults("Select a status filter to view item details.");
       }
@@ -722,8 +763,9 @@
     state.inventoryMode = "status";
 
     const params = new URLSearchParams();
-    params.set("status", activeFilters.join(","));
-    const storeQueryValue = storeQuery ? storeQuery.trim() : "";
+    if (hasStatusFilters) {
+      params.set("status", activeFilters.join(","));
+    }
     if (storeQueryValue) {
       if (/^\d+$/.test(storeQueryValue)) {
         params.set("store_id", storeQueryValue);
@@ -754,10 +796,17 @@
       const results = Array.isArray(data.results) ? data.results : [];
       state.inventoryResults = results;
       renderInventoryResults(results);
-      const labels = activeFilters.map(formatStatusLabel).join(", ");
-      const storePart = storeQuery ? ` for stores matching "${storeQuery}"` : "";
+      const labels = hasStatusFilters ? activeFilters.map(formatStatusLabel).join(", ") : "";
+      const statusLabel = hasStatusFilters ? `${labels} items` : "items";
+      const storePart = storeQueryValue ? ` for stores matching "${storeQueryValue}"` : "";
+      const totals = computeInventoryTotals(results);
+      const totalCount = Number.isFinite(data.total_count) ? data.total_count : totals.count;
+      const totalQty = Number.isFinite(data.total_qty) ? data.total_qty : totals.qty;
+      const totalValue = Number.isFinite(data.total_value) ? data.total_value : totals.value;
       const limitedNote = data.limited ? " Showing first 200 items." : "";
-      elements.inventoryStatus.textContent = `Found ${data.count ?? results.length} ${labels} items${storePart}.${limitedNote}`;
+      elements.inventoryStatus.textContent = `Found ${totalCount} ${statusLabel}${storePart}. Total qty ${formatNumber(
+        totalQty
+      )}. Total value ${formatNumber(totalValue)}.${limitedNote}`;
     } catch (error) {
       if (requestId !== state.inventoryFilterRequestId) {
         return;
@@ -803,12 +852,16 @@
       state.baseStores = [...state.allStores];
       state.filteredStores = [...state.allStores];
       renderTable(state.filteredStores);
+      const totals = computeTotals(state.filteredStores);
       updateSummary(state.filteredStores);
       updateFilterCounts();
 
       const totalCount = state.allStores.length;
       const filteredCount = state.filteredStores.length;
-      const statusParts = [`Showing ${filteredCount} of ${totalCount} stores`];
+      const statusParts = [
+        `Showing ${filteredCount} of ${totalCount} stores`,
+        `Total value ${formatNumber(totals.aging.total)}`,
+      ];
       elements.filterStatus.textContent = statusParts.join(". ") + ".";
       elements.tableStatus.textContent = filteredCount === 0 ? "No stores match the current filters." : "Ready.";
 
@@ -844,11 +897,15 @@
       state.baseStores = fallback;
       state.filteredStores = fallback;
       renderTable(state.filteredStores);
+      const totals = computeTotals(state.filteredStores);
       updateSummary(state.filteredStores);
       updateFilterCounts();
       const totalCount = state.allStores.length;
       const filteredCount = state.filteredStores.length;
-      const statusParts = [`Showing ${filteredCount} of ${totalCount} stores`];
+      const statusParts = [
+        `Showing ${filteredCount} of ${totalCount} stores`,
+        `Total value ${formatNumber(totals.aging.total)}`,
+      ];
       if (activeFilters.length) statusParts.push(`${activeFilters.length} status tags active`);
       if (query) statusParts.push("Search active");
       elements.filterStatus.textContent = statusParts.join(". ") + ".";
@@ -867,6 +924,7 @@
     state.baseStores = stores;
     state.filteredStores = stores;
     renderTable(stores);
+    const totals = computeTotals(stores);
     updateSummary(stores);
     updateFilterCounts(data.status_counts);
 
@@ -875,7 +933,10 @@
       : state.allStores.length;
     const queryCount = Number.isFinite(data.store_count_query) ? data.store_count_query : totalCount;
     const filteredCount = stores.length;
-    const statusParts = [`Showing ${filteredCount} of ${query ? queryCount : totalCount} stores`];
+    const statusParts = [
+      `Showing ${filteredCount} of ${query ? queryCount : totalCount} stores`,
+      `Total value ${formatNumber(totals.aging.total)}`,
+    ];
     if (activeFilters.length) statusParts.push(`${activeFilters.length} status tags active`);
     if (query) statusParts.push("Search active");
     elements.filterStatus.textContent = statusParts.join(". ") + ".";

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.dependencies import require_auth
 from app.services.alert_service import run_alerts
@@ -13,7 +14,6 @@ def run_alerts_now(
 ):
     try:
         stats = run_alerts(send_notifications=send_notifications)
-    # noinspection PyBroadException
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "completed", "stats": stats}

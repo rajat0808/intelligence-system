@@ -1,6 +1,7 @@
 from datetime import date
 import logging
 import math
+import pickle
 
 from app.ml.features import build_feature_dict
 from app.ml.model_io import load_model, model_available
@@ -21,6 +22,15 @@ _MODEL_METADATA = None
 _MODEL_LOAD_ERROR = None
 
 _LOGGER = logging.getLogger(__name__)
+
+_MODEL_LOAD_EXCEPTIONS = (
+    OSError,
+    EOFError,
+    ValueError,
+    ImportError,
+    AttributeError,
+    pickle.UnpicklingError,
+)
 
 
 def _clamp(value, low=0.0, high=1.0):
@@ -61,8 +71,7 @@ def _load_model_once():
         return _MODEL
     try:
         model, metadata = load_model()
-    # noinspection PyBroadException
-    except Exception as exc:
+    except _MODEL_LOAD_EXCEPTIONS as exc:
         _MODEL_LOAD_ERROR = exc
         _LOGGER.warning("Failed to load ML model: %s", exc)
         return None

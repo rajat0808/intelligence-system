@@ -34,8 +34,7 @@ def _raise_http_error(exc):
         body_bytes = exc.read()
         if body_bytes:
             body = body_bytes.decode("utf-8", errors="replace").strip()
-    # noinspection PyBroadException
-    except Exception:
+    except (OSError, ValueError):
         body = ""
 
     if body:

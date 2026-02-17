@@ -11,3 +11,20 @@ services:
         value: "false"
       - key: EXCEL_AUTO_IMPORT
         value: "true"
+      - key: ENVIRONMENT
+        value: "production"
+      - key: DASHBOARD_SESSION_SECRET
+        value: "_WnIN7tEU_AIXw27UxJglPWkhwQv0KP-z-dvzWF_41k"
+  - type: worker
+    name: inventory-intelligence-scheduler
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: PYTHONPATH=. python scripts/run_scheduler.py
+    envVars:
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: ENVIRONMENT
+        value: "production"
+      - key: DASHBOARD_SESSION_SECRET
+        value: "_WnIN7tEU_AIXw27UxJglPWkhwQv0KP-z-dvzWF_41k"

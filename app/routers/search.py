@@ -33,7 +33,7 @@ def search_inventory(
             if entry:
                 departments.append(entry)
 
-    if not query and not departments:
+    if not query and not departments and store_id is None:
         raise HTTPException(
             status_code=400,
             detail="Provide a search query or department filter.",
@@ -70,6 +70,7 @@ def search_inventory(
             p.category,
             p.department_name,
             p.supplier_name,
+            p.image_url,
             p.mrp,
             i.store_id,
             i.quantity,
