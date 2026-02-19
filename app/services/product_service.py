@@ -7,12 +7,19 @@ from app.models.price_history import PriceHistory
 from app.models.product import Product
 
 
-def apply_price_update(db: Session, product: Product, new_price: float) -> bool:
+def apply_price_update(
+    db: Session,
+    product: Product,
+    new_price: float,
+    *,
+    changed_at: datetime | None = None,
+) -> datetime | None:
     if new_price is None:
-        return False
+        return None
     if product.price is not None and float(product.price) == float(new_price):
-        return False
-    changed_at = datetime.now(timezone.utc)
+        return None
+    if changed_at is None:
+        changed_at = datetime.now(timezone.utc)
     db.add(
         PriceHistory(
             product_id=product.id,
@@ -23,7 +30,7 @@ def apply_price_update(db: Session, product: Product, new_price: float) -> bool:
     )
     product.price = new_price
     product.last_price_update = changed_at
-    return True
+    return changed_at
 
 
 def calculate_days_active(created_at: datetime | None) -> int | None:

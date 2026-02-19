@@ -35,6 +35,19 @@ def main():
             f"{sheet_name}: {counts['inserted']} inserted, "
             f"{counts['updated']} updated, {counts['skipped']} skipped"
         )
+        price_changes = counts.get("price_changes") or []
+        if price_changes:
+            print("Price changes:")
+            for change in price_changes:
+                store_id = change.get("store_id", "--")
+                style_code = change.get("style_code", "--")
+                old_price = change.get("old_price", 0.0)
+                new_price = change.get("new_price", 0.0)
+                changed_at = change.get("changed_at", "--")
+                print(
+                    f"  store {store_id} | {style_code}: "
+                    f"{old_price} -> {new_price} ({changed_at})"
+                )
 
     if args.dry_run:
         print("Dry run complete, no changes committed.")

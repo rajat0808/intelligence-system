@@ -421,7 +421,7 @@ def upsert_store(db, row):
     return apply_upsert(db, store, Store, values)
 
 
-def upsert_product(db, row):
+def upsert_product(db, row, *, price_change_log=None):
     product_id = to_int(row.get("id"), "id", required=False)
     store_id = to_int(row.get("store_id"), "store_id")
     ensure_store_exists(db, store_id)
@@ -445,32 +445,30 @@ def upsert_product(db, row):
         Product.style_code == style_code,
         Product.store_id == store_id,
     )
-    values = {
-        "store_id": store_id,
-        "style_code": style_code,
-        "barcode": barcode,
-        "article_name": article_name,
-        "category": category,
-        "supplier_name": supplier_name,
-        "mrp": mrp,
-    }
-    if image_url is not None:
-        if image_explicit or not product or not product.image_url:
-            values["image_url"] = image_url
-    if department_name is not None:
-        values["department_name"] = department_name
-    elif not product:
-        values["department_name"] = ""
-    if product:
-        warn_store_mismatch(product, store_id, style_code)
-        apply_product_updates(product, values)
-        if price is not None:
-            apply_price_update(db, product, price)
-        return "updated"
-
-    product = build_product(values, mrp, price)
-    db.add(product)
-    return "inserted"
+    values = build_product_values(
+        store_id=store_id,
+        style_code=style_code,
+        barcode=barcode,
+        article_name=article_name,
+        category=category,
+        supplier_name=supplier_name,
+        mrp=mrp,
+        product=product,
+        image_url=image_url,
+        image_explicit=image_explicit,
+        department_name=department_name,
+        default_department_for_new=True,
+    )
+    return finalize_product_upsert(
+        db,
+        product,
+        values,
+        mrp=mrp,
+        price=price,
+        store_id=store_id,
+        style_code=style_code,
+        price_change_log=price_change_log,
+    )
 
 
 def upsert_inventory(db, row):
@@ -611,6 +609,104 @@ def apply_product_updates(product, values):
         setattr(product, key, value)
 
 
+def build_product_values(
+    *,
+    store_id,
+    style_code,
+    barcode,
+    article_name,
+    category,
+    supplier_name,
+    mrp,
+    product,
+    image_url,
+    image_explicit,
+    department_name=None,
+    default_department_for_new=False,
+):
+    values = {
+        "store_id": store_id,
+        "style_code": style_code,
+        "barcode": barcode,
+        "article_name": article_name,
+        "category": category,
+        "supplier_name": supplier_name,
+        "mrp": mrp,
+    }
+    if image_url is not None:
+        if image_explicit or not product or not product.image_url:
+            values["image_url"] = image_url
+    if department_name is not None:
+        values["department_name"] = department_name
+    elif default_department_for_new and not product:
+        values["department_name"] = ""
+    return values
+
+
+def finalize_product_upsert(
+    db,
+    product,
+    values,
+    *,
+    mrp,
+    price,
+    store_id,
+    style_code,
+    return_product=False,
+    flush_on_insert=False,
+    price_change_log=None,
+):
+    if product:
+        old_price = product.price
+        old_mrp = product.mrp
+        warn_store_mismatch(product, store_id, style_code)
+        apply_product_updates(product, values)
+        changed_at = None
+        if price is not None:
+            changed_at = apply_price_update(db, product, price)
+            if changed_at and price_change_log is not None:
+                price_change_log.append(
+                    {
+                        "store_id": store_id,
+                        "style_code": style_code,
+                        "old_price": old_price if old_price is not None else 0.0,
+                        "new_price": price,
+                        "changed_at": changed_at.isoformat(),
+                        "source": "price",
+                    }
+                )
+        else:
+            if (
+                mrp is not None
+                and old_mrp is not None
+                and float(mrp) != float(old_mrp)
+                and (old_price is None or float(old_price) == float(old_mrp))
+            ):
+                changed_at = apply_price_update(db, product, mrp)
+                if changed_at and price_change_log is not None:
+                    price_change_log.append(
+                        {
+                            "store_id": store_id,
+                            "style_code": style_code,
+                            "old_price": old_price if old_price is not None else 0.0,
+                            "new_price": mrp,
+                            "changed_at": changed_at.isoformat(),
+                            "source": "mrp",
+                        }
+                    )
+        if return_product:
+            return "updated", product
+        return "updated"
+
+    product = build_product(values, mrp, price)
+    db.add(product)
+    if flush_on_insert:
+        db.flush()
+    if return_product:
+        return "inserted", product
+    return "inserted"
+
+
 def build_product(values, mrp, price):
     if price is None:
         price = mrp
@@ -620,7 +716,7 @@ def build_product(values, mrp, price):
     return product
 
 
-def upsert_product_from_daily_update(db, row):
+def upsert_product_from_daily_update(db, row, *, price_change_log=None):
     store_id = to_int(row.get("store_id"), "store_id")
     ensure_store_exists(db, store_id)
     style_code = to_str(row.get("style_code"), "style_code")
@@ -650,29 +746,31 @@ def upsert_product_from_daily_update(db, row):
         Product.style_code == style_code,
         Product.store_id == store_id,
     )
-    values = {
-        "store_id": store_id,
-        "style_code": style_code,
-        "barcode": barcode,
-        "article_name": article_name,
-        "category": category,
-        "supplier_name": supplier_name,
-        "mrp": mrp,
-        "department_name": department_name,
-    }
-    if image_url is not None:
-        if image_explicit or not product or not product.image_url:
-            values["image_url"] = image_url
-    if product:
-        warn_store_mismatch(product, store_id, style_code)
-        apply_product_updates(product, values)
-        if price is not None:
-            apply_price_update(db, product, price)
-        return "updated", product
-    product = build_product(values, mrp, price)
-    db.add(product)
-    db.flush()
-    return "inserted", product
+    values = build_product_values(
+        store_id=store_id,
+        style_code=style_code,
+        barcode=barcode,
+        article_name=article_name,
+        category=category,
+        supplier_name=supplier_name,
+        mrp=mrp,
+        product=product,
+        image_url=image_url,
+        image_explicit=image_explicit,
+        department_name=department_name,
+    )
+    return finalize_product_upsert(
+        db,
+        product,
+        values,
+        mrp=mrp,
+        price=price,
+        store_id=store_id,
+        style_code=style_code,
+        return_product=True,
+        flush_on_insert=True,
+        price_change_log=price_change_log,
+    )
 
 
 def upsert_inventory_from_daily_update(db, row, product):
@@ -704,9 +802,11 @@ def upsert_inventory_from_daily_update(db, row, product):
     return apply_upsert(db, inventory, Inventory, values)
 
 
-def import_daily_update_row(db, row):
+def import_daily_update_row(db, row, *, price_change_log=None):
     counts = {"inserted": 0, "updated": 0, "skipped": 0}
-    product_action, product = upsert_product_from_daily_update(db, row)
+    product_action, product = upsert_product_from_daily_update(
+        db, row, price_change_log=price_change_log
+    )
     counts[product_action] += 1
     inventory_action = upsert_inventory_from_daily_update(db, row, product)
     counts[inventory_action] += 1
@@ -714,17 +814,18 @@ def import_daily_update_row(db, row):
 
 
 def import_rows(db, sheet_name, rows):
-    counts = {"inserted": 0, "updated": 0, "skipped": 0}
+    counts = {"inserted": 0, "updated": 0, "skipped": 0, "price_changes": []}
+    price_change_log = counts["price_changes"]
     for row in rows:
         if sheet_name == DAILY_UPDATE_SHEET:
-            row_counts = import_daily_update_row(db, row)
+            row_counts = import_daily_update_row(db, row, price_change_log=price_change_log)
             for key, value in row_counts.items():
                 counts[key] += value
             continue
         if sheet_name == "stores":
             action = upsert_store(db, row)
         elif sheet_name == "products":
-            action = upsert_product(db, row)
+            action = upsert_product(db, row, price_change_log=price_change_log)
         elif sheet_name == "inventory":
             action = upsert_inventory(db, row)
         else:
