@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Sign in | Sindh Fashion</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <link rel="stylesheet" href="/static/style.css?v=20260220c" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,36 +14,58 @@
   </head>
   <body>
     <main class="login-shell">
-      <section class="login-panel glass">
+      <section class="login-panel">
         <div class="login-brand">
           <img class="logo-image" src="/static/sindh-logo.png" alt="Sindh Fashion logo" />
           <div>
-            <div class="login-title">Sign in</div>
+            <div class="login-title">Welcome Back</div>
             <div class="login-subtitle">Sindh Fashion Inventory</div>
           </div>
         </div>
         <form class="login-form" method="post" action="/login">
-          <label class="login-label" for="login-id">Login ID</label>
-          <input
-            class="search-input"
-            id="login-id"
-            name="username"
-            type="text"
-            placeholder="Enter login ID"
-            autocomplete="username"
-            required
-          />
-          <label class="login-label" for="login-password">Password</label>
-          <input
-            class="search-input"
-            id="login-password"
-            name="password"
-            type="password"
-            placeholder="Enter password"
-            autocomplete="current-password"
-            required
-          />
-          <button class="button login-button" type="submit">Sign in</button>
+          <div class="login-field">
+            <label class="login-label" for="login-id">Username</label>
+            <div class="login-input-wrap">
+              <span class="login-input-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="12" cy="8" r="4"></circle>
+                  <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6"></path>
+                </svg>
+              </span>
+              <input
+                class="login-input"
+                id="login-id"
+                name="username"
+                type="text"
+                placeholder="Enter username"
+                autocomplete="username"
+                required
+              />
+            </div>
+          </div>
+          <div class="login-field">
+            <label class="login-label" for="login-password">Password</label>
+            <div class="login-input-wrap">
+              <span class="login-input-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="5" y="11" width="14" height="10" rx="2"></rect>
+                  <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
+                </svg>
+              </span>
+              <input
+                class="login-input"
+                id="login-password"
+                name="password"
+                type="password"
+                placeholder="Enter password"
+                autocomplete="current-password"
+                required
+              />
+            </div>
+          </div>
+          <div class="login-actions">
+            <button class="button login-button login-button-primary" type="submit">Login</button>
+          </div>
         </form>
         {% if error %}
           <div class="login-error">{{ error }}</div>
