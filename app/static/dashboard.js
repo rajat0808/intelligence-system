@@ -151,6 +151,10 @@
     inventoryEmpty: document.getElementById("inventory-empty"),
     inventoryStatus: document.getElementById("inventory-status"),
     inventoryAlertOnly: document.getElementById("inventory-alert-only"),
+    imagePopout: document.getElementById("image-popout"),
+    imagePopoutPreview: document.getElementById("image-popout-preview"),
+    imagePopoutCaption: document.getElementById("image-popout-caption"),
+    imagePopoutClose: document.getElementById("image-popout-close"),
   };
 
   const numberFormatter = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
@@ -623,6 +627,9 @@
 
       const imageCell = document.createElement("td");
       imageCell.dataset.label = "Image";
+      const thumbButton = document.createElement("button");
+      thumbButton.type = "button";
+      thumbButton.className = "item-thumb-button";
       const image = document.createElement("img");
       image.className = "item-thumb";
       const imageUrl = item.image_url ?? item.image ?? item.thumbnail;
@@ -631,11 +638,24 @@
       image.alt = item.article_name ?? item.style_code ?? "Item image";
       image.loading = "lazy";
       image.decoding = "async";
+      thumbButton.dataset.previewSrc = image.src;
+      thumbButton.dataset.previewAlt = image.alt;
+      thumbButton.dataset.previewCaption = [item.style_code, item.article_name].filter(Boolean).join(" - ");
+      thumbButton.setAttribute("aria-label", "Open image preview");
+      thumbButton.addEventListener("click", () => {
+        openImagePopout(
+          thumbButton.dataset.previewSrc || image.src || fallbackUrl,
+          thumbButton.dataset.previewAlt || image.alt || "Inventory image preview",
+          thumbButton.dataset.previewCaption || ""
+        );
+      });
       image.onerror = () => {
         image.onerror = null;
         image.src = fallbackUrl;
+        thumbButton.dataset.previewSrc = fallbackUrl;
       };
-      imageCell.appendChild(image);
+      thumbButton.appendChild(image);
+      imageCell.appendChild(thumbButton);
       row.appendChild(imageCell);
 
       const cells = [
@@ -666,6 +686,38 @@
     });
 
     elements.inventoryEmpty.hidden = items.length !== 0;
+  }
+
+  function openImagePopout(src, alt, caption) {
+    if (!src) {
+      return;
+    }
+    if (!elements.imagePopout || !elements.imagePopoutPreview) {
+      window.open(src, "_blank", "noopener,noreferrer");
+      return;
+    }
+    elements.imagePopoutPreview.src = src;
+    elements.imagePopoutPreview.alt = alt || "Inventory image preview";
+    if (elements.imagePopoutCaption) {
+      elements.imagePopoutCaption.textContent = caption || "";
+    }
+    elements.imagePopout.hidden = false;
+    elements.imagePopout.removeAttribute("hidden");
+    elements.imagePopout.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+  }
+
+  function closeImagePopout() {
+    if (!elements.imagePopout || elements.imagePopout.hidden) {
+      return;
+    }
+    elements.imagePopout.hidden = true;
+    elements.imagePopout.setAttribute("hidden", "");
+    elements.imagePopout.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("modal-open");
+    if (elements.imagePopoutPreview) {
+      elements.imagePopoutPreview.removeAttribute("src");
+    }
   }
 
   function resetInventoryResults(message) {
@@ -1151,6 +1203,24 @@
     };
     elements.inventoryQuery.addEventListener("keydown", inventoryKeyHandler);
     elements.inventoryStore.addEventListener("keydown", inventoryKeyHandler);
+
+    if (elements.imagePopout) {
+      elements.imagePopout.addEventListener("click", (event) => {
+        if (event.target === elements.imagePopout) {
+          closeImagePopout();
+        }
+      });
+    }
+    if (elements.imagePopoutClose) {
+      elements.imagePopoutClose.addEventListener("click", () => {
+        closeImagePopout();
+      });
+    }
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeImagePopout();
+      }
+    });
 
     elements.refreshBtn.addEventListener("click", () => {
       flashAction(elements.refreshBtn);
