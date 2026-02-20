@@ -1,5 +1,6 @@
 import importlib
 import logging
+import re
 import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -55,6 +56,20 @@ def _image_extension_from_format(image_format):
     if fmt in {"png", "webp"}:
         return f".{fmt}"
     return ".jpg"
+
+
+def _looks_like_explicit_image_reference(value):
+    if _is_blank(value):
+        return False
+    cleaned = str(value).strip().replace("\\", "/")
+    if not cleaned:
+        return False
+    lower_value = cleaned.lower()
+    if lower_value.startswith(("http://", "https://", "data:", "/")):
+        return True
+    if lower_value.startswith(("static/", "images/")):
+        return True
+    return Path(cleaned).suffix.lower() in _IMAGE_EXTENSIONS
 
 
 def _extract_embedded_images(worksheet, header_keys):
@@ -155,6 +170,32 @@ REQUIRED_COLUMNS = {
 
 DAILY_UPDATE_SHEET = "daily_update"
 DEFAULT_SHEET_ORDER = ["stores", "products", "inventory"]
+CARD_LAYOUT_LABEL_MAP = {
+    "supplier_name": "supplier_name",
+    "supplier": "supplier_name",
+    "department": "department_name",
+    "department_name": "department_name",
+    "style": "style_code",
+    "style_code": "style_code",
+    "itemcode": "barcode",
+    "item_code": "barcode",
+    "barcode": "barcode",
+    "mrp": "mrp",
+    "item_mrp": "mrp",
+    "image_name": "image_url",
+    "image_url": "image_url",
+    "image": "image_url",
+    "pur_qty": "quantity",
+    "qty": "quantity",
+    "quantity": "quantity",
+    "cbs_qty": "quantity",
+    "stock_days": "stock_days",
+    "category_name": "category",
+    "category": "category",
+    "store_id": "store_id",
+}
+_PLACEHOLDER_VALUES = {"none", "[none]", "null", "[null]", "na", "n/a", "nan", "-", "--"}
+_LEADING_STORE_CODE = re.compile(r"^\s*(\d{3})")
 
 
 def _import_models():
@@ -175,6 +216,17 @@ def _import_models():
 
 def _is_blank(value):
     return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _clean_text(value):
+    if _is_blank(value):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.lower() in _PLACEHOLDER_VALUES:
+        return None
+    return text
 
 
 def _is_summary_value(value):
@@ -239,6 +291,218 @@ def normalize_sheet_list(value):
     else:
         items = [part.strip() for part in str(value).split(",") if part.strip()]
     return items or None
+
+
+def _infer_store_id_from_sheet_name(sheet_name):
+    if _is_blank(sheet_name):
+        return None
+    match = _LEADING_STORE_CODE.match(str(sheet_name))
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _to_card_field(label):
+    normalized = normalize_header(label)
+    return CARD_LAYOUT_LABEL_MAP.get(normalized)
+
+
+def _build_daily_update_row_from_card(record, inferred_store_id):
+    supplier_name = _clean_text(record.get("supplier_name"))
+    if not supplier_name:
+        return None
+
+    style_code = _clean_text(record.get("style_code"))
+    barcode = _clean_text(record.get("barcode"))
+    if not style_code:
+        style_code = barcode
+    if not style_code:
+        return None
+
+    mrp = record.get("mrp")
+    if _is_blank(mrp):
+        return None
+
+    store_value = record.get("store_id")
+    store_id = None
+    if not _is_blank(store_value):
+        store_id = to_int(store_value, "store_id", required=False)
+    if store_id is None:
+        store_id = inferred_store_id
+    if store_id is None:
+        return None
+
+    department_name = _clean_text(record.get("department_name"))
+    category = _clean_text(record.get("category"))
+    if not department_name:
+        department_name = category or "Uncategorized"
+    if not category:
+        category = department_name
+
+    stock_days = record.get("stock_days")
+    if _is_blank(stock_days):
+        stock_days = 0
+
+    row = {
+        "store_id": store_id,
+        "supplier_name": supplier_name,
+        "stock_days": stock_days,
+        "style_code": style_code,
+        "department_name": department_name,
+        "category": category,
+        "mrp": mrp,
+    }
+
+    quantity = record.get("quantity")
+    if not _is_blank(quantity):
+        row["quantity"] = quantity
+
+    image_url = _clean_text(record.get("image_url"))
+    if image_url:
+        row["image_url"] = image_url
+
+    if barcode:
+        row["barcode"] = barcode
+
+    return row
+
+
+def _append_card_record(rows, columns, record_metas, record, inferred_store_id):
+    if not record:
+        return
+    converted = _build_daily_update_row_from_card(record, inferred_store_id)
+    if not converted:
+        return
+    rows.append(converted)
+    columns.update(converted.keys())
+    value_idx = record.get("__value_idx")
+    supplier_row = record.get("__supplier_row")
+    if isinstance(value_idx, int) and isinstance(supplier_row, int):
+        record_metas.append((len(rows) - 1, value_idx, supplier_row))
+
+
+def _extract_card_layout_images(worksheet, rows, record_metas):
+    images = getattr(worksheet, "_images", []) or []
+    if not images or not rows or not record_metas:
+        return
+
+    value_indices = sorted({meta[1] for meta in record_metas})
+    if not value_indices:
+        return
+
+    records_by_value_idx = {}
+    for row_index, value_idx, supplier_row in record_metas:
+        records_by_value_idx.setdefault(value_idx, []).append((supplier_row, row_index))
+    for value_idx in records_by_value_idx:
+        records_by_value_idx[value_idx].sort(key=lambda item: item[0])
+
+    anchored_images = []
+    for image in images:
+        anchor = getattr(image, "anchor", None)
+        if not anchor or not hasattr(anchor, "_from"):
+            continue
+        cell_from = anchor._from
+        col = getattr(cell_from, "col", None)
+        row = getattr(cell_from, "row", None)
+        if col is None or row is None:
+            continue
+        anchored_images.append((row + 1, col, image))
+
+    if not anchored_images:
+        return
+
+    anchored_images.sort(key=lambda item: (item[0], item[1]))
+    used_rows = set()
+    _IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    for image_row, image_col, image in anchored_images:
+        right_side_indices = [idx for idx in value_indices if idx > image_col]
+        if right_side_indices:
+            value_idx = min(right_side_indices, key=lambda idx: idx - image_col)
+        else:
+            value_idx = min(value_indices, key=lambda idx: abs(idx - image_col))
+
+        candidates = records_by_value_idx.get(value_idx) or []
+        if not candidates:
+            continue
+
+        supplier_target = image_row + 1
+        best_row_index = None
+        best_distance = None
+        for supplier_row, row_index in candidates:
+            if row_index in used_rows:
+                continue
+            distance = abs(supplier_row - supplier_target)
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best_row_index = row_index
+        if best_row_index is None:
+            continue
+
+        try:
+            data = image._data()
+        except Exception:
+            continue
+        if not data:
+            continue
+
+        record = rows[best_row_index]
+        base_value = (
+            _clean_text(record.get("image_url"))
+            or _clean_text(record.get("style_code"))
+            or _clean_text(record.get("barcode"))
+            or f"row_{best_row_index + 1}"
+        )
+        base_name = _sanitize_image_basename(base_value) or f"row_{best_row_index + 1}"
+        extension = _image_extension_from_format(getattr(image, "format", None))
+        filename = f"{base_name}{extension}"
+        try:
+            (_IMAGE_DIR / filename).write_bytes(data)
+        except OSError:
+            continue
+        record["image_url"] = f"/static/images/{filename}"
+        used_rows.add(best_row_index)
+
+
+def load_card_layout_rows(worksheet):
+    rows = []
+    columns = set()
+    record_metas = []
+    active_records = {}
+    inferred_store_id = _infer_store_id_from_sheet_name(worksheet.title)
+
+    for row_number, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
+        for col_idx, raw_label in enumerate(row):
+            key = _to_card_field(raw_label)
+            if not key:
+                continue
+            value_idx = col_idx + 2
+            if value_idx >= len(row):
+                continue
+            value = row[value_idx]
+            if _is_blank(value):
+                continue
+
+            record = active_records.get(value_idx)
+            if key == "supplier_name":
+                _append_card_record(rows, columns, record_metas, record, inferred_store_id)
+                record = {"__value_idx": value_idx, "__supplier_row": row_number}
+                active_records[value_idx] = record
+            elif record is None:
+                record = {"__value_idx": value_idx, "__supplier_row": row_number}
+                active_records[value_idx] = record
+
+            record[key] = value
+
+    for record in active_records.values():
+        _append_card_record(rows, columns, record_metas, record, inferred_store_id)
+
+    _extract_card_layout_images(worksheet, rows, record_metas)
+
+    return rows, columns
 
 
 def get_daily_update_aliases():
@@ -346,6 +610,21 @@ def load_sheet_rows(worksheet):
     if not headers:
         return [], set()
     header_keys = [normalize_header(header) for header in headers]
+    non_blank_headers = [key for key in header_keys if key]
+    should_try_card_layout = False
+    if not non_blank_headers:
+        should_try_card_layout = True
+    elif len(non_blank_headers) < 3:
+        should_try_card_layout = True
+    elif len(set(non_blank_headers)) <= len(non_blank_headers) // 2:
+        should_try_card_layout = True
+
+    if should_try_card_layout:
+        card_rows, card_columns = load_card_layout_rows(worksheet)
+        if card_rows:
+            return card_rows, card_columns
+        if not non_blank_headers:
+            return [], set()
     indices = [(idx, key) for idx, key in enumerate(header_keys) if key]
     columns = {key for key in header_keys if key}
     embedded_images = _extract_embedded_images(worksheet, header_keys)
@@ -372,7 +651,10 @@ def load_sheet_rows(worksheet):
         record = {key: row[idx] for idx, key in indices}
         if embedded_images:
             image_value = embedded_images.get(row_idx)
-            if image_value and _is_blank(record.get("image_url")):
+            if image_value and (
+                _is_blank(record.get("image_url"))
+                or not _looks_like_explicit_image_reference(record.get("image_url"))
+            ):
                 record["image_url"] = image_value
         rows.append(record)
     return rows, columns
@@ -384,6 +666,9 @@ def validate_columns(sheet_name, columns):
     if sheet_name == DAILY_UPDATE_SHEET and "stock_days" in missing:
         if "lifecycle_start_date" in columns:
             missing.remove("stock_days")
+    if sheet_name == DAILY_UPDATE_SHEET and "category" in missing:
+        if "department_name" in columns:
+            missing.remove("category")
     if sheet_name == "inventory" and "cost_price" in missing:
         if "mrp" in columns:
             missing.remove("cost_price")
@@ -571,7 +856,7 @@ def _normalize_image_value(value, image_index):
         filename = image_index.get(Path(cleaned).stem.lower())
     if filename:
         return f"/static/images/{filename}"
-    if Path(cleaned).suffix:
+    if Path(cleaned).suffix.lower() in _IMAGE_EXTENSIONS:
         return f"/static/images/{cleaned}"
     return None
 
@@ -633,9 +918,10 @@ def build_product_values(
         "supplier_name": supplier_name,
         "mrp": mrp,
     }
-    if image_url is not None:
-        if image_explicit or not product or not product.image_url:
-            values["image_url"] = image_url
+    if image_explicit:
+        values["image_url"] = image_url
+    elif image_url is not None and (not product or not product.image_url):
+        values["image_url"] = image_url
     if department_name is not None:
         values["department_name"] = department_name
     elif default_department_for_new and not product:
@@ -732,7 +1018,10 @@ def upsert_product_from_daily_update(db, row, *, price_change_log=None):
         if not _is_blank(article_value)
         else style_code
     )
-    category = to_str(row.get("category"), "category")
+    category_value = row.get("category")
+    if _is_blank(category_value):
+        category_value = row.get("department_name")
+    category = to_str(category_value, "category")
     supplier_name = to_str(row.get("supplier_name"), "supplier_name")
     mrp = to_float(row.get("mrp"), "mrp")
     price = parse_optional_price(row)
