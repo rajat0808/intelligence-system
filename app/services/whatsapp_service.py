@@ -6,6 +6,7 @@ from app.config import get_settings
 
 
 _NON_DIGIT_RE = re.compile(r"\D+")
+_ABSOLUTE_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 
 def _normalize_graph_phone(phone):
@@ -13,19 +14,53 @@ def _normalize_graph_phone(phone):
     return digits
 
 
-def _build_payload(api_url, message, phone):
+def _resolve_media_url(image_url, media_base_url):
+    if image_url is None:
+        return None
+    image_value = str(image_url).strip()
+    if not image_value:
+        return None
+    if _ABSOLUTE_URL_RE.match(image_value):
+        return image_value
+
+    base_value = str(media_base_url or "").strip()
+    if not base_value:
+        return None
+
+    normalized_path = image_value.replace("\\", "/").strip()
+    lower_path = normalized_path.lower()
+    if lower_path.startswith("images/"):
+        normalized_path = "/static/" + normalized_path.lstrip("/")
+    elif lower_path.startswith("static/"):
+        normalized_path = "/" + normalized_path.lstrip("/")
+    elif not normalized_path.startswith("/"):
+        normalized_path = "/" + normalized_path.lstrip("/")
+
+    return base_value.rstrip("/") + normalized_path
+
+
+def _build_payload(api_url, message, phone, image_url=None):
     if "graph.facebook.com" in api_url.lower():
         normalized_phone = _normalize_graph_phone(phone)
         if not normalized_phone:
             raise ValueError("phone is required")
+        if image_url:
+            return {
+                "messaging_product": "whatsapp",
+                "to": normalized_phone,
+                "type": "image",
+                "image": {"link": image_url, "caption": message},
+            }
         return {
             "messaging_product": "whatsapp",
             "to": normalized_phone,
             "type": "text",
-
             "text": {"body": message},
         }
-    return {"to": phone, "message": message}
+    payload = {"to": phone, "message": message}
+    if image_url:
+        payload["media_url"] = image_url
+    return payload
 
 
 def _raise_http_error(exc):
@@ -44,11 +79,12 @@ def _raise_http_error(exc):
     raise RuntimeError("WhatsApp API error: HTTP {}".format(exc.code)) from exc
 
 
-def send_whatsapp(message, phone):
+def send_whatsapp(message, phone, image_url=None):
     settings = get_settings()
 
     api_url = (settings.WHATSAPP_API_URL or "").strip()
     access_token = (settings.WHATSAPP_ACCESS_TOKEN or "").strip()
+    media_base_url = (settings.WHATSAPP_MEDIA_BASE_URL or "").strip()
 
     if not api_url:
         raise RuntimeError("WHATSAPP_API_URL is not configured")
@@ -67,7 +103,8 @@ def send_whatsapp(message, phone):
     if not phone:
         raise ValueError("phone is required")
 
-    payload = json.dumps(_build_payload(api_url, message, phone)).encode("utf-8")
+    media_url = _resolve_media_url(image_url, media_base_url)
+    payload = json.dumps(_build_payload(api_url, message, phone, media_url)).encode("utf-8")
 
     if access_token.lower().startswith("bearer "):
         auth_header = access_token

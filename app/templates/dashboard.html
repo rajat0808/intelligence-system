@@ -115,9 +115,9 @@
             <div class="note">Items moving across stores.</div>
           </div>
           <div class="card" style="--delay: 160ms;">
-            <h2>Rate revised inventory value</h2>
+            <h2>Rate revision inventory value</h2>
             <div class="value" id="rate-revised-capital">--</div>
-            <div class="note">Revised-rate tagged items.</div>
+            <div class="note">Items tagged as rate revision.</div>
           </div>
           <div class="card" style="--delay: 240ms;">
             <h2>Very danger inventory value</h2>
@@ -199,7 +199,7 @@
             </div>
             <div class="health-item" data-aging="RR_TT">
               <div class="health-row">
-                <span>Rate revised</span>
+                <span>Rate revision</span>
                 <span class="health-value" id="aging-rate-revised">--</span>
               </div>
               <div class="health-bar"><span></span></div>
@@ -213,6 +213,25 @@
             </div>
           </div>
           <div class="health-insights" id="health-insights"></div>
+        </section>
+
+        <section class="panel search-panel" id="table-panel">
+          <header>
+            <h2 class="panel-title">Store status breakdown</h2>
+            <div class="panel-sub">Inventory value status by store.</div>
+          </header>
+          <table class="store-table">
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>Total inventory value</th>
+                <th>Status mix</th>
+              </tr>
+            </thead>
+            <tbody id="store-table-body"></tbody>
+          </table>
+          <div class="empty" id="empty-state" hidden>No matching stores.</div>
+          <div class="status" id="table-status">Waiting for data...</div>
         </section>
 
         <section class="panel search-panel" id="filters-panel">
@@ -239,7 +258,7 @@
                     Transfer <span class="chip-count" data-count-for="TRANSFER">--</span>
                   </button>
                   <button class="chip toggle" data-filter-group="aging" data-filter="RR_TT" type="button" aria-pressed="false">
-                    Rate revised <span class="chip-count" data-count-for="RR_TT">--</span>
+                    Rate revision <span class="chip-count" data-count-for="RR_TT">--</span>
                   </button>
                   <button class="chip toggle" data-filter-group="aging" data-filter="VERY_DANGER" type="button" aria-pressed="false">
                     Very danger <span class="chip-count" data-count-for="VERY_DANGER">--</span>
@@ -252,25 +271,6 @@
             </div>
           </div>
           <div class="status" id="filter-status">Waiting for data...</div>
-        </section>
-
-        <section class="panel search-panel" id="table-panel">
-          <header>
-            <h2 class="panel-title">Store status breakdown</h2>
-            <div class="panel-sub">Inventory value status by store.</div>
-          </header>
-          <table class="store-table">
-            <thead>
-              <tr>
-                <th>Store</th>
-                <th>Total inventory value</th>
-                <th>Status mix</th>
-              </tr>
-            </thead>
-            <tbody id="store-table-body"></tbody>
-          </table>
-          <div class="empty" id="empty-state" hidden>No matching stores.</div>
-          <div class="status" id="table-status">Waiting for data...</div>
         </section>
 
         <section class="panel inventory-panel" id="inventory-panel">

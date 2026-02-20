@@ -175,7 +175,7 @@
     CRITICAL: "Critical",
     HEALTHY: "Healthy",
     TRANSFER: "Transfer",
-    RR_TT: "Rate revised",
+    RR_TT: "Rate revision",
     VERY_DANGER: "Very danger",
   };
   const agingClassMap = {
@@ -351,7 +351,7 @@
     const averageCapital = totals.count > 0 ? totals.aging.total / totals.count : 0;
     const insights = [
       { label: "Avg inventory value per store", value: formatNumber(averageCapital) },
-      { label: "Rate revised stores", value: formatNumber(totals.agingCounts.RR_TT) },
+      { label: "Rate revision stores", value: formatNumber(totals.agingCounts.RR_TT) },
       { label: "Very danger stores", value: formatNumber(totals.agingCounts.VERY_DANGER) },
     ];
 

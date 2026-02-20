@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -10,6 +12,7 @@ router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 class WhatsAppSendRequest(BaseModel):
     message: str
     phone: str
+    image_url: Optional[str] = None
 
 
 @router.post("/send")
@@ -23,7 +26,7 @@ def send_message(payload: WhatsAppSendRequest, _auth=Depends(require_auth)):
         raise HTTPException(status_code=400, detail="phone is required")
 
     try:
-        send_whatsapp(message, phone)
+        send_whatsapp(message, phone, image_url=payload.image_url)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

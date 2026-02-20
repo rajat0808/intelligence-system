@@ -11,6 +11,7 @@ AGING_STATUS_ALIASES = {
     "transfer": "TRANSFER",
     "rr_tt": "RR_TT",
     "rate_revised": "RR_TT",
+    "rate_revision": "RR_TT",
     "very_danger": "VERY_DANGER",
     "verydanger": "VERY_DANGER",
 }

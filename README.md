@@ -70,10 +70,14 @@ Required for WhatsApp alerts:
 - `FOUNDER_PHONE`
 - `CO_FOUNDER_PHONE`
 
+Optional for sending product images in alerts:
+- `WHATSAPP_MEDIA_BASE_URL` (public base URL used to convert relative image paths like `/static/images/ABC.jpg` into absolute URLs)
+
 WhatsApp Cloud API example:
 ```text
 WHATSAPP_API_URL=https://graph.facebook.com/v19.0/<PHONE_NUMBER_ID>/messages
 WHATSAPP_ACCESS_TOKEN=<ACCESS_TOKEN>
+WHATSAPP_MEDIA_BASE_URL=https://your-domain.com
 FOUNDER_PHONE=15551234567
 CO_FOUNDER_PHONE=15551234568
 ```
@@ -99,7 +103,7 @@ Optional defaults (see `app/config.py`):
 - `POST /ingest/excel` - trigger Excel import; body: `{"path":"datasource/daily_update.xlsx","sheets":["daily_update"],"dry_run":false}`
 - `GET /products/{style_code}` - product detail with current price, days active, and price history
 - `POST /products/price` - upsert product price by style code (creates if missing)
-- `POST /whatsapp/send` - send a WhatsApp message; body: `{"message":"...","phone":"15551234567"}`
+- `POST /whatsapp/send` - send a WhatsApp message; body: `{"message":"...","phone":"15551234567","image_url":"https://.../item.jpg"}`
 - `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"item_mrp":4500,"lifecycle_start_date":"2025-01-01"}`
 - `GET /ml/inventory` - ML risk scores from datasource (filters: `store_id`, `product_id`, `category`, `min_risk`, `limit`)
 - `POST /alerts/run` - run alert workflow using datasource (query: `send_notifications=true|false`)

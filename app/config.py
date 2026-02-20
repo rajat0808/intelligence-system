@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # ==============================
     WHATSAPP_API_URL: Optional[str] = None
     WHATSAPP_ACCESS_TOKEN: Optional[str] = None
+    WHATSAPP_MEDIA_BASE_URL: Optional[str] = None
 
     # ==============================
     # Alert Recipients
