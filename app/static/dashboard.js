@@ -642,6 +642,9 @@
       thumbButton.dataset.previewAlt = image.alt;
       thumbButton.dataset.previewCaption = [item.style_code, item.article_name].filter(Boolean).join(" - ");
       thumbButton.setAttribute("aria-label", "Open image preview");
+      image.dataset.previewSrc = thumbButton.dataset.previewSrc;
+      image.dataset.previewAlt = thumbButton.dataset.previewAlt;
+      image.dataset.previewCaption = thumbButton.dataset.previewCaption;
       thumbButton.addEventListener("click", () => {
         openImagePopout(
           thumbButton.dataset.previewSrc || image.src || fallbackUrl,
@@ -649,10 +652,18 @@
           thumbButton.dataset.previewCaption || ""
         );
       });
+      image.addEventListener("click", () => {
+        openImagePopout(
+          image.dataset.previewSrc || thumbButton.dataset.previewSrc || image.src || fallbackUrl,
+          image.dataset.previewAlt || thumbButton.dataset.previewAlt || image.alt || "Inventory image preview",
+          image.dataset.previewCaption || thumbButton.dataset.previewCaption || ""
+        );
+      });
       image.onerror = () => {
         image.onerror = null;
         image.src = fallbackUrl;
         thumbButton.dataset.previewSrc = fallbackUrl;
+        image.dataset.previewSrc = fallbackUrl;
       };
       thumbButton.appendChild(image);
       imageCell.appendChild(thumbButton);
@@ -1203,6 +1214,20 @@
     };
     elements.inventoryQuery.addEventListener("keydown", inventoryKeyHandler);
     elements.inventoryStore.addEventListener("keydown", inventoryKeyHandler);
+
+    if (elements.inventoryTableBody) {
+      elements.inventoryTableBody.addEventListener("click", (event) => {
+        const trigger = event.target.closest(".item-thumb-button, .item-thumb");
+        if (!trigger) return;
+        const src = trigger.dataset.previewSrc || trigger.getAttribute("src");
+        if (!src) return;
+        openImagePopout(
+          src,
+          trigger.dataset.previewAlt || trigger.getAttribute("alt") || "Inventory image preview",
+          trigger.dataset.previewCaption || ""
+        );
+      });
+    }
 
     if (elements.imagePopout) {
       elements.imagePopout.addEventListener("click", (event) => {
