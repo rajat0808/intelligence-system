@@ -5,6 +5,7 @@ FastAPI service for tracking inventory risk, surfacing danger alerts, and sendin
 ## Features
 - Store danger dashboard with capital at risk by store
 - Search API with danger filters and alert-only views
+- Inventory Search UI with thumbnail click-to-preview image popout
 - Daily scheduler that records snapshots and triggers alerts
 - WhatsApp alert integration (configurable)
 - SQLite by default, SQLAlchemy models throughout
@@ -132,6 +133,10 @@ Images:
 - If `image` is blank, the importer auto-matches by `style_code` or `barcode` to a file in `app/static/images/`.
 - If `image` is provided, it can be a filename like `ABC123.jpg` (no URL required).
 - Embedded images in the `image` column are extracted on import and saved to `app/static/images/`.
+
+Dashboard image preview:
+- In **Inventory Search**, click a thumbnail in the **Image** column to open a larger preview.
+- Close preview by clicking outside the image, pressing `Esc`, or using the close button.
 
 Template:
 - Copy `datasource/daily_update_template.xlsx` to `datasource/daily_update.xlsx` and fill it daily.
