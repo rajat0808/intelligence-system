@@ -30,3 +30,9 @@ datasource/*.xlsx
 
 ml/artifacts/
 app/ml/artifacts/
+
+# Generated during Excel imports
+app/static/images/*.jpg
+app/static/images/*.jpeg
+app/static/images/*.png
+app/static/images/*.webp
