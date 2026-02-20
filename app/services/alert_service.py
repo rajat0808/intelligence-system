@@ -1,7 +1,7 @@
 import json
 from datetime import date
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
@@ -11,6 +11,8 @@ from app.core.decision_engine import evaluate_inventory
 from app.database import SessionLocal
 from app.models.alert import Alert
 from app.models.daily_snapshot import DailySnapshot
+from app.models.inventory import Inventory
+from app.models.product import Product
 from app.services.ml_service import predict_and_log
 from app.services.whatsapp_service import send_whatsapp
 
@@ -35,16 +37,12 @@ def run_alerts(*, send_notifications=True):
     db = SessionLocal()
     today = date.today()
 
-    # noinspection SqlNoDataSourceInspection
     inventories = db.execute(
-        text(
-            """
-            SELECT i.*, p.category, p.mrp
-            FROM inventory i
-            JOIN products p ON p.id = i.product_id
-            """
+        select(Inventory, Product.category, Product.mrp).join(
+            Product,
+            Product.id == Inventory.product_id,
         )
-    ).fetchall()
+    ).all()
 
     sent_alerts = set()
     recipients = [
@@ -62,19 +60,23 @@ def run_alerts(*, send_notifications=True):
             ).scalars()
         }
 
-        for inv in inventories:
+        for row in inventories:
+            inv = row.Inventory
+            category = row.category
+            mrp = row.mrp
+
             age = (today - inv.lifecycle_start_date).days
-            status = classify_status_with_default(inv.category, age)
+            status = classify_status_with_default(category, age)
             danger = danger_level(inv.lifecycle_start_date)
-            unit_price = inv.mrp
+            unit_price = mrp
             if unit_price is None or unit_price <= 0:
                 unit_price = inv.cost_price
-            mrp_value = inv.mrp
+            mrp_value = mrp
             if mrp_value is None or mrp_value <= 0:
                 mrp_value = unit_price
 
             decision = evaluate_inventory(
-                category=inv.category,
+                category=category,
                 age_days=age,
                 demand_band="M",
                 danger_level=danger,
@@ -103,7 +105,7 @@ def run_alerts(*, send_notifications=True):
 
             ml_risk = predict_and_log(
                 db=db,
-                category=inv.category,
+                category=category,
                 quantity=inv.quantity,
                 cost_price=unit_price,
                 lifecycle_start_date=inv.lifecycle_start_date,
@@ -123,7 +125,7 @@ def run_alerts(*, send_notifications=True):
                 for recipient_name, phone in recipients:
                     if not phone:
                         continue
-                    alert_key = (today, alert_reason, inv.category, phone)
+                    alert_key = (today, alert_reason, category, phone)
                     if alert_key in sent_alerts:
                         continue
 
@@ -131,7 +133,7 @@ def run_alerts(*, send_notifications=True):
                         db,
                         alert_date=today,
                         alert_type=alert_reason,
-                        category=inv.category,
+                        category=category,
                         phone=phone,
                     ):
                         sent_alerts.add(alert_key)
@@ -151,7 +153,7 @@ def run_alerts(*, send_notifications=True):
                         today,
                         recipient_name,
                         alert_reason,
-                        inv.category,
+                        category,
                         inv.store_id,
                         age,
                         ml_risk,
@@ -171,7 +173,7 @@ def run_alerts(*, send_notifications=True):
                         Alert(
                             alert_date=today,
                             alert_type=alert_reason,
-                            category=inv.category,
+                            category=category,
                             store_id=inv.store_id,
                             recipient=recipient_name,
                             phone_number=phone,

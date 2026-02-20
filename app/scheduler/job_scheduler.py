@@ -44,6 +44,14 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _ensure_utc(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _owner_id() -> str:
     return "{}:{}".format(socket.gethostname(), os.getpid())
 
@@ -66,6 +74,8 @@ def _cutoff_datetime(now: datetime, run_after: time) -> datetime:
 def _is_stale(last_heartbeat: Optional[datetime], now: datetime, stale_seconds: int) -> bool:
     if last_heartbeat is None:
         return True
+    last_heartbeat = _ensure_utc(last_heartbeat)
+    now = _ensure_utc(now) or now
     return now - last_heartbeat > timedelta(seconds=stale_seconds)
 
 
@@ -119,7 +129,8 @@ def _acquire_job_run(
         if existing.status == STATUS_FAILED:
             if existing.attempt >= max_retries:
                 return None
-            if existing.next_retry_at and now < existing.next_retry_at:
+            next_retry_at = _ensure_utc(existing.next_retry_at)
+            if next_retry_at and now < next_retry_at:
                 return None
 
         stmt = (
