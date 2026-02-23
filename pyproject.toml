@@ -23,3 +23,6 @@ dependencies = [
   "itsdangerous>=2.2",
   "Pillow>=10.0",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]

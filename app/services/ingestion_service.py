@@ -103,7 +103,7 @@ def _extract_embedded_images(worksheet, header_keys):
         try:
             data = image._data()
         except Exception:
-            continue
+            data = None
         if not data:
             continue
         try:
@@ -445,7 +445,7 @@ def _extract_card_layout_images(worksheet, rows, record_metas):
         try:
             data = image._data()
         except Exception:
-            continue
+            data = None
         if not data:
             continue
 

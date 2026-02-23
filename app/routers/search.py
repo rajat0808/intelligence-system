@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query, Request
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from app.core.dashboard_auth import require_login_api
 from app.core.aging_rules import classify_status_with_default
@@ -47,19 +47,13 @@ def search_inventory(
 
     alert_only = str(alert_only).strip().lower() in ("1", "true", "yes", "y")
 
-    department_clause = ""
+    department_values = [entry.lower() for entry in departments]
     params = {
         "q": "%{}%".format(query) if query else None,
         "store_id": store_id,
+        "departments_count": len(department_values),
+        "departments": department_values or ["__no_department_filter__"],
     }
-
-    if departments:
-        department_filters = []
-        for idx, entry in enumerate(departments):
-            key = "dept_{}".format(idx)
-            department_filters.append("LOWER(p.department_name) = :{}".format(key))
-            params[key] = entry.lower()
-        department_clause = "AND ({})".format(" OR ".join(department_filters))
 
     # noinspection SqlNoDataSourceInspection
     sql = text(
@@ -85,12 +79,15 @@ def search_inventory(
                 OR LOWER(p.article_name) LIKE LOWER(:q)
             )
             AND (:store_id IS NULL OR i.store_id = :store_id)
-            {department_clause}
+            AND (
+                :departments_count = 0
+                OR LOWER(COALESCE(p.department_name, '')) IN :departments
+            )
         ORDER BY
             p.article_name,
             i.store_id
-        """.format(department_clause=department_clause)
-    )
+        """
+    ).bindparams(bindparam("departments", expanding=True))
 
     with engine.connect() as conn:
         rows = conn.execute(sql, params).mappings().all()

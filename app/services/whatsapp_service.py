@@ -1,12 +1,14 @@
 import json
 import re
 from urllib import error, request
+from urllib.parse import urlparse
 
 from app.config import get_settings
 
 
 _NON_DIGIT_RE = re.compile(r"\D+")
 _ABSOLUTE_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+_ALLOWED_HTTP_SCHEMES = {"http", "https"}
 
 
 def _normalize_graph_phone(phone):
@@ -63,6 +65,14 @@ def _build_payload(api_url, message, phone, image_url=None):
     return payload
 
 
+def _validate_api_url(api_url):
+    parsed = urlparse(api_url)
+    scheme = parsed.scheme.lower()
+    if scheme not in _ALLOWED_HTTP_SCHEMES or not parsed.netloc:
+        raise RuntimeError("WHATSAPP_API_URL must be an absolute HTTP(S) URL")
+    return api_url
+
+
 def _raise_http_error(exc):
     body = ""
     try:
@@ -90,6 +100,7 @@ def send_whatsapp(message, phone, image_url=None):
         raise RuntimeError("WHATSAPP_API_URL is not configured")
     if not access_token:
         raise RuntimeError("WHATSAPP_ACCESS_TOKEN is not configured")
+    api_url = _validate_api_url(api_url)
 
     if message is None:
         raise ValueError("message is required")
@@ -122,7 +133,7 @@ def send_whatsapp(message, phone, image_url=None):
     )
 
     try:
-        with request.urlopen(req, timeout=15) as response:
+        with request.urlopen(req, timeout=15) as response:  # nosec B310
             status_code = response.getcode()
             if status_code < 200 or status_code >= 300:
                 raise RuntimeError("WhatsApp API error: HTTP {}".format(status_code))

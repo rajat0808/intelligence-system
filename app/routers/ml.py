@@ -47,22 +47,12 @@ def inventory_risk(
         if not category_value:
             category_value = None
 
-    where_clauses = []
-    params = {"limit": limit}
-
-    if store_id is not None:
-        where_clauses.append("i.store_id = :store_id")
-        params["store_id"] = store_id
-    if product_id is not None:
-        where_clauses.append("i.product_id = :product_id")
-        params["product_id"] = product_id
-    if category_value:
-        where_clauses.append("LOWER(p.category) = LOWER(:category)")
-        params["category"] = category_value
-
-    where_sql = ""
-    if where_clauses:
-        where_sql = " AND " + " AND ".join(where_clauses)
+    params = {
+        "limit": limit,
+        "store_id": store_id,
+        "product_id": product_id,
+        "category": category_value,
+    }
 
     # noinspection SqlNoDataSourceInspection
     sql = text(
@@ -82,11 +72,12 @@ def inventory_risk(
             p.mrp
         FROM inventory i
         JOIN products p ON p.id = i.product_id
-        WHERE 1=1
-        {where_sql}
+        WHERE (:store_id IS NULL OR i.store_id = :store_id)
+            AND (:product_id IS NULL OR i.product_id = :product_id)
+            AND (:category IS NULL OR LOWER(p.category) = LOWER(:category))
         ORDER BY i.store_id, p.style_code
         LIMIT :limit
-        """.format(where_sql=where_sql)
+        """
     )
 
     with engine.connect() as conn:

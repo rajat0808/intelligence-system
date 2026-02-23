@@ -1,6 +1,6 @@
 import unittest
 
-from app.services.whatsapp_service import _build_payload, _resolve_media_url
+from app.services.whatsapp_service import _build_payload, _resolve_media_url, _validate_api_url
 
 
 class WhatsAppServiceTest(unittest.TestCase):
@@ -47,6 +47,16 @@ class WhatsAppServiceTest(unittest.TestCase):
             payload["media_url"],
             "https://inventory.example.com/static/images/DRS-1001.jpg",
         )
+
+    def test_validate_api_url_accepts_https(self):
+        self.assertEqual(
+            _validate_api_url("https://graph.facebook.com/v19.0/123/messages"),
+            "https://graph.facebook.com/v19.0/123/messages",
+        )
+
+    def test_validate_api_url_rejects_non_http_scheme(self):
+        with self.assertRaises(RuntimeError):
+            _validate_api_url("file:///tmp/messages")
 
 
 if __name__ == "__main__":

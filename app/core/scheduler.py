@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-import random
+import secrets
 import threading
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
@@ -78,7 +78,7 @@ class Scheduler:
     def _schedule_next(self, job: ScheduledJob) -> datetime:
         run_at = _next_daily_run(job.run_time, tz=self._tz)
         if job.jitter_seconds:
-            run_at += timedelta(seconds=random.randint(0, job.jitter_seconds))
+            run_at += timedelta(seconds=secrets.randbelow(job.jitter_seconds + 1))
         return run_at
 
     def start(self) -> None:
