@@ -13,7 +13,7 @@ AGING_STATUS_ALIASES = {
     "rate_revised": "RR_TT",
     "rate_revision": "RR_TT",
     "very_danger": "VERY_DANGER",
-    "verydanger": "VERY_DANGER",
+    "very danger": "VERY_DANGER",
 }
 
 

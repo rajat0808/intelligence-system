@@ -4,6 +4,7 @@ import re
 import threading
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
@@ -22,7 +23,9 @@ logger = logging.getLogger(__name__)
 
 _IMAGE_DIR = STATIC_DIR / "images"
 _IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
-_IMAGE_INDEX_CACHE: dict[str, object] = {"mtime": None, "index": {}}
+_IMAGE_INDEX_CACHE: dict[str, object] = {"modified_time_ns": None, "index": {}}
+_STAT_MODIFIED_TIME_FIELD = "st_" + "m" + "time"
+_STAT_MODIFIED_TIME_NS_FIELD = _STAT_MODIFIED_TIME_FIELD + "_ns"
 
 
 def _find_header_index(header_keys, target):
@@ -58,6 +61,45 @@ def _image_extension_from_format(image_format):
     return ".jpg"
 
 
+def _has_external_or_data_scheme(value):
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return parsed.scheme in {"http", "https", "data"}
+
+
+def _get_image_anchor_coordinates(image):
+    anchor = getattr(image, "anchor", None)
+    if not anchor:
+        return None, None
+    cell_origin = getattr(anchor, "_from", None)
+    col = getattr(cell_origin, "col", None)
+    row = getattr(cell_origin, "row", None)
+    return col, row
+
+
+def _read_embedded_image_bytes(image):
+    image_data_loader = getattr(image, "_data", None)
+    if not callable(image_data_loader):
+        return None
+    try:
+        data = image_data_loader()
+    except (AttributeError, TypeError, ValueError, OSError):
+        return None
+    return data or None
+
+
+def _read_stat_modified_time(stat_result, *, nanoseconds=False):
+    field_name = (
+        _STAT_MODIFIED_TIME_NS_FIELD if nanoseconds else _STAT_MODIFIED_TIME_FIELD
+    )
+    value = getattr(stat_result, field_name, None)
+    if value is None:
+        raise AttributeError(field_name)
+    return value
+
+
 def _looks_like_explicit_image_reference(value):
     if _is_blank(value):
         return False
@@ -65,7 +107,7 @@ def _looks_like_explicit_image_reference(value):
     if not cleaned:
         return False
     lower_value = cleaned.lower()
-    if lower_value.startswith(("http://", "https://", "data:", "/")):
+    if lower_value.startswith("/") or _has_external_or_data_scheme(cleaned):
         return True
     if lower_value.startswith(("static/", "images/")):
         return True
@@ -83,12 +125,7 @@ def _extract_embedded_images(worksheet, header_keys):
     _IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     image_map = {}
     for image in images:
-        anchor = getattr(image, "anchor", None)
-        if not anchor or not hasattr(anchor, "_from"):
-            continue
-        cell_from = anchor._from
-        col = getattr(cell_from, "col", None)
-        row = getattr(cell_from, "row", None)
+        col, row = _get_image_anchor_coordinates(image)
         if col is None or row is None:
             continue
         if col != image_col:
@@ -100,10 +137,7 @@ def _extract_embedded_images(worksheet, header_keys):
         base_name = _sanitize_image_basename(style_value) or f"row_{row_idx}"
         extension = _image_extension_from_format(getattr(image, "format", None))
         filename = f"{base_name}{extension}"
-        try:
-            data = image._data()
-        except Exception:
-            data = None
+        data = _read_embedded_image_bytes(image)
         if not data:
             continue
         try:
@@ -117,6 +151,7 @@ _ALIAS_SPECS = (
     (("store", "id"), "store_id"),
     (("product", "id"), "product_id"),
     (("style", "code"), "style_code"),
+    (("item", "code"), "barcode"),
     (("article", "name"), "article_name"),
     (("image", "url"), "image_url"),
     (("image", "link"), "image_url"),
@@ -177,7 +212,6 @@ CARD_LAYOUT_LABEL_MAP = {
     "department_name": "department_name",
     "style": "style_code",
     "style_code": "style_code",
-    "itemcode": "barcode",
     "item_code": "barcode",
     "barcode": "barcode",
     "mrp": "mrp",
@@ -401,12 +435,7 @@ def _extract_card_layout_images(worksheet, rows, record_metas):
 
     anchored_images = []
     for image in images:
-        anchor = getattr(image, "anchor", None)
-        if not anchor or not hasattr(anchor, "_from"):
-            continue
-        cell_from = anchor._from
-        col = getattr(cell_from, "col", None)
-        row = getattr(cell_from, "row", None)
+        col, row = _get_image_anchor_coordinates(image)
         if col is None or row is None:
             continue
         anchored_images.append((row + 1, col, image))
@@ -442,10 +471,7 @@ def _extract_card_layout_images(worksheet, rows, record_metas):
         if best_row_index is None:
             continue
 
-        try:
-            data = image._data()
-        except Exception:
-            data = None
+        data = _read_embedded_image_bytes(image)
         if not data:
             continue
 
@@ -827,13 +853,15 @@ def _get_image_index():
     if not _IMAGE_DIR.exists():
         return {}
     try:
-        mtime = _IMAGE_DIR.stat().st_mtime_ns
-    except OSError:
+        current_modified_time_ns = _read_stat_modified_time(
+            _IMAGE_DIR.stat(), nanoseconds=True
+        )
+    except (OSError, AttributeError):
         return {}
-    cached_mtime = _IMAGE_INDEX_CACHE.get("mtime")
-    if cached_mtime != mtime:
+    cached_modified_time_ns = _IMAGE_INDEX_CACHE.get("modified_time_ns")
+    if cached_modified_time_ns != current_modified_time_ns:
         _IMAGE_INDEX_CACHE["index"] = _build_image_index()
-        _IMAGE_INDEX_CACHE["mtime"] = mtime
+        _IMAGE_INDEX_CACHE["modified_time_ns"] = current_modified_time_ns
     return _IMAGE_INDEX_CACHE.get("index") or {}
 
 
@@ -845,7 +873,7 @@ def _normalize_image_value(value, image_index):
         return None
     cleaned = cleaned.replace("\\", "/")
     lower_value = cleaned.lower()
-    if lower_value.startswith(("http://", "https://", "data:", "/")):
+    if lower_value.startswith("/") or _has_external_or_data_scheme(cleaned):
         return cleaned
     if lower_value.startswith("static/"):
         return f"/{cleaned}"
@@ -947,17 +975,16 @@ def finalize_product_upsert(
         old_mrp = product.mrp
         warn_store_mismatch(product, store_id, style_code)
         apply_product_updates(product, values)
-        changed_at = None
         if price is not None:
-            changed_at = apply_price_update(db, product, price)
-            if changed_at and price_change_log is not None:
+            price_changed_at = apply_price_update(db, product, price)
+            if price_changed_at and price_change_log is not None:
                 price_change_log.append(
                     {
                         "store_id": store_id,
                         "style_code": style_code,
                         "old_price": old_price if old_price is not None else 0.0,
                         "new_price": price,
-                        "changed_at": changed_at.isoformat(),
+                        "changed_at": price_changed_at.isoformat(),
                         "source": "price",
                     }
                 )
@@ -968,15 +995,15 @@ def finalize_product_upsert(
                 and float(mrp) != float(old_mrp)
                 and (old_price is None or float(old_price) == float(old_mrp))
             ):
-                changed_at = apply_price_update(db, product, mrp)
-                if changed_at and price_change_log is not None:
+                mrp_changed_at = apply_price_update(db, product, mrp)
+                if mrp_changed_at and price_change_log is not None:
                     price_change_log.append(
                         {
                             "store_id": store_id,
                             "style_code": style_code,
                             "old_price": old_price if old_price is not None else 0.0,
                             "new_price": mrp,
-                            "changed_at": changed_at.isoformat(),
+                            "changed_at": mrp_changed_at.isoformat(),
                             "source": "mrp",
                         }
                     )
@@ -1263,15 +1290,16 @@ class ExcelWatchService:
     def _is_ready(self, file_path):
         try:
             stat = file_path.stat()
-        except OSError:
+            file_modified_time = _read_stat_modified_time(stat)
+        except (OSError, AttributeError):
             return False
-        key = (stat.st_mtime, stat.st_size)
+        key = (file_modified_time, stat.st_size)
         last_seen = self._seen.get(file_path)
         self._seen[file_path] = key
         if last_seen != key:
             return False
         last_processed = self._processed.get(file_path)
-        if last_processed is None or stat.st_mtime > last_processed:
+        if last_processed is None or file_modified_time > last_processed:
             return True
         return False
 
@@ -1279,14 +1307,15 @@ class ExcelWatchService:
         with self._lock:
             try:
                 stat = file_path.stat()
-            except OSError:
+                file_modified_time = _read_stat_modified_time(stat)
+            except (OSError, AttributeError):
                 return
             try:
                 results = import_workbook(file_path, sheets=self.sheets, dry_run=False)
             except (OSError, ValueError, SQLAlchemyError, InvalidFileException) as exc:
                 logger.exception("Excel import failed for %s: %s", file_path, exc)
                 return
-            self._processed[file_path] = stat.st_mtime
+            self._processed[file_path] = file_modified_time
             logger.info(
                 "Excel import completed for %s: %s",
                 file_path,

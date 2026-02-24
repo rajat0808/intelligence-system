@@ -10,24 +10,34 @@ from app.models.product import Product
 def apply_price_update(
     db: Session,
     product: Product,
-    new_price: float,
+    new_price: float | None,
     *,
     changed_at: datetime | None = None,
 ) -> datetime | None:
     if new_price is None:
         return None
-    if product.price is not None and float(product.price) == float(new_price):
+
+    new_price = float(new_price)
+    old_price = float(product.price) if product.price is not None else None
+    if old_price is not None and old_price == new_price:
         return None
+
     if changed_at is None:
         changed_at = datetime.now(timezone.utc)
-    db.add(
-        PriceHistory(
-            product_id=product.id,
-            old_price=product.price if product.price is not None else 0.0,
-            new_price=new_price,
-            changed_at=changed_at,
+    elif changed_at.tzinfo is None:
+        changed_at = changed_at.replace(tzinfo=timezone.utc)
+    else:
+        changed_at = changed_at.astimezone(timezone.utc)
+
+    if product.id is not None:
+        db.add(
+            PriceHistory(
+                product_id=product.id,
+                old_price=old_price if old_price is not None else 0.0,
+                new_price=new_price,
+                changed_at=changed_at,
+            )
         )
-    )
     product.price = new_price
     product.last_price_update = changed_at
     return changed_at
@@ -41,7 +51,7 @@ def calculate_days_active(created_at: datetime | None) -> int | None:
 
 
 def load_price_history(db: Session, product_id: int) -> list[PriceHistory]:
-    return (
+    history: list[PriceHistory] = (
         db.execute(
             select(PriceHistory)
             .where(PriceHistory.product_id == product_id)
@@ -50,3 +60,4 @@ def load_price_history(db: Session, product_id: int) -> list[PriceHistory]:
         .scalars()
         .all()
     )
+    return history

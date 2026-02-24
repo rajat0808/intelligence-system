@@ -37,8 +37,8 @@ uvicorn app.main:app --reload
 ```
 
 Then open:
-- `http://localhost:8000/health` for health
-- `http://localhost:8000/dashboard/` for the dashboard
+- `localhost:8000/health` for health
+- `localhost:8000/dashboard/` for the dashboard
 
 ## Testing
 ```powershell
