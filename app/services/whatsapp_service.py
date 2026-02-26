@@ -145,7 +145,7 @@ def send_whatsapp(message, phone, image_url=None):
     )
 
     try:
-        with request.urlopen(req, timeout=15) as response:  # nosec B310
+        with request.urlopen(req, timeout=15) as response:  # no sec B310
             status_code = response.getcode()
             if status_code < 200 or status_code >= 300:
                 raise RuntimeError("WhatsApp API error: HTTP {}".format(status_code))

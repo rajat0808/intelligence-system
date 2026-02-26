@@ -49,7 +49,7 @@ def _build_style_store_index(inventories, today):
     return style_store_index
 
 
-def _build_transfer_hint(style_code, style_store_index, current_store_id):
+def build_transfer_hint(style_code, style_store_index, current_store_id):
     if not style_code:
         return "Transfer Hint: Style code unavailable for peer-store comparison."
 
@@ -167,7 +167,7 @@ def run_alerts(*, send_notifications=True):
             department_name = (row.department_name or "").strip() or "Unspecified"
             image_url = row.image_url
             store_label = _format_store_label(inv.store_id, row.store_name, row.store_city)
-            transfer_hint = _build_transfer_hint(style_code, style_store_index, inv.store_id)
+            transfer_hint = build_transfer_hint(style_code, style_store_index, inv.store_id)
 
             age = (today - inv.lifecycle_start_date).days
             status = classify_status_with_default(category, age)

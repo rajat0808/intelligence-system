@@ -6,16 +6,16 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database.base import Base
 from app.models.alert import Alert
-from app.services.alert_service import _build_transfer_hint, alert_already_sent
+from app.services.alert_service import alert_already_sent, build_transfer_hint
 
 
 class AlertServiceTest(unittest.TestCase):
     def test_alert_dedup(self):
         engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(bind=engine)
-        Session = sessionmaker(bind=engine)
+        session_factory = sessionmaker(bind=engine)
 
-        db = Session()
+        db = session_factory()
         db.add(
             Alert(
                 alert_date=date.today(),
@@ -63,7 +63,7 @@ class AlertServiceTest(unittest.TestCase):
                 },
             ]
         }
-        hint = _build_transfer_hint("DRS-1001", style_store_index, current_store_id=101)
+        hint = build_transfer_hint("DRS-1001", style_store_index, current_store_id=101)
         self.assertIn("doing well", hint)
         self.assertIn("Store 102", hint)
         self.assertIn("HEALTHY", hint)
@@ -81,7 +81,7 @@ class AlertServiceTest(unittest.TestCase):
                 }
             ]
         }
-        hint = _build_transfer_hint("DRS-1001", style_store_index, current_store_id=101)
+        hint = build_transfer_hint("DRS-1001", style_store_index, current_store_id=101)
         self.assertIn("No peer-store data", hint)
 
 

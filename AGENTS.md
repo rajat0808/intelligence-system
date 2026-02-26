@@ -2,8 +2,8 @@
 A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
 
 ### Available skills
-- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations. (file: C:/Users/rs617/AppData/Local/JetBrains/PyCharm2025.3/aia/codex/skills/.system/skill-creator/SKILL.md)
-- skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). (file: C:/Users/rs617/AppData/Local/JetBrains/PyCharm2025.3/aia/codex/skills/.system/skill-installer/SKILL.md)
+- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations. (path: `C:/Users/rs617/AppData/Local/JetBrains/PyCharm2025.3/aia/codex/skills/.system/skill-creator/SKILL.md`)
+- skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). (path: `C:/Users/rs617/AppData/Local/JetBrains/PyCharm2025.3/aia/codex/skills/.system/skill-installer/SKILL.md`)
 
 ### How to use skills
 - Discovery: The list above is the skills available in this session (name + description + file path). Skill bodies live on disk at the listed paths.

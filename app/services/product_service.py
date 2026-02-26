@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -51,7 +52,7 @@ def calculate_days_active(created_at: datetime | None) -> int | None:
 
 
 def load_price_history(db: Session, product_id: int) -> list[PriceHistory]:
-    history: list[PriceHistory] = (
+    history = (
         db.execute(
             select(PriceHistory)
             .where(PriceHistory.product_id == product_id)
@@ -60,4 +61,4 @@ def load_price_history(db: Session, product_id: int) -> list[PriceHistory]:
         .scalars()
         .all()
     )
-    return history
+    return cast(list[PriceHistory], list(history))
