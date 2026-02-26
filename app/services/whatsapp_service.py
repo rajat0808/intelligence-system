@@ -41,6 +41,10 @@ def _resolve_media_url(image_url, media_base_url):
     return base_value.rstrip("/") + normalized_path
 
 
+def resolve_media_url(image_url, media_base_url):
+    return _resolve_media_url(image_url, media_base_url)
+
+
 def _build_payload(api_url, message, phone, image_url=None):
     if "graph.facebook.com" in api_url.lower():
         normalized_phone = _normalize_graph_phone(phone)
@@ -65,12 +69,20 @@ def _build_payload(api_url, message, phone, image_url=None):
     return payload
 
 
+def build_payload(api_url, message, phone, image_url=None):
+    return _build_payload(api_url, message, phone, image_url)
+
+
 def _validate_api_url(api_url):
     parsed = urlparse(api_url)
     scheme = parsed.scheme.lower()
     if scheme not in _ALLOWED_HTTP_SCHEMES or not parsed.netloc:
         raise RuntimeError("WHATSAPP_API_URL must be an absolute HTTP(S) URL")
     return api_url
+
+
+def validate_api_url(api_url):
+    return _validate_api_url(api_url)
 
 
 def _raise_http_error(exc):
