@@ -37,6 +37,7 @@ def _decode_jwt(token: str) -> dict:
             detail="JWT auth is not configured",
         )
     try:
+        # noinspection PyPackageRequirements
         import jwt  # type: ignore
     except ImportError as exc:
         raise HTTPException(
