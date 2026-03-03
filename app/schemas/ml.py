@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -22,3 +22,11 @@ class MLPredictRequest(BaseModel):
 
 class MLPredictResponse(BaseModel):
     risk_score: float
+
+
+class MLStatusResponse(BaseModel):
+    mode: str
+    model_available: bool
+    model_loaded: bool
+    load_error: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None

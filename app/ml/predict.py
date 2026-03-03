@@ -56,8 +56,14 @@ def _heuristic_risk(category, quantity, cost_price, lifecycle_start_date):
 
 def _load_model_once():
     global _MODEL, _MODEL_METADATA, _MODEL_LOAD_ERROR
-    if _MODEL is not None or _MODEL_LOAD_ERROR is not None:
+    if _MODEL is not None:
         return _MODEL
+    if _MODEL_LOAD_ERROR is not None:
+        # Retry loading automatically when artifacts appear after startup.
+        if _MODEL_LOAD_ERROR == "missing" and model_available():
+            _MODEL_LOAD_ERROR = None
+        else:
+            return None
     try:
         model, metadata = load_model()
     except Exception as exc:  # Model artifacts are optional; any load failure should fall back to heuristic scoring.
@@ -69,11 +75,30 @@ def _load_model_once():
         return None
     _MODEL = model
     _MODEL_METADATA = metadata
+    _MODEL_LOAD_ERROR = None
     return _MODEL
 
 
 def model_is_available():
     return model_available()
+
+
+def get_model_runtime_info():
+    model = _load_model_once()
+    if _MODEL_LOAD_ERROR is None:
+        load_error = None
+    elif _MODEL_LOAD_ERROR == "missing":
+        load_error = "model artifact not found"
+    else:
+        load_error = str(_MODEL_LOAD_ERROR)
+
+    return {
+        "mode": "trained_model" if model is not None else "heuristic_fallback",
+        "model_available": bool(model_available()),
+        "model_loaded": bool(model is not None),
+        "load_error": load_error,
+        "metadata": _MODEL_METADATA if isinstance(_MODEL_METADATA, dict) else None,
+    }
 
 
 def predict_risk(
@@ -119,4 +144,4 @@ def predict_risk(
     return _heuristic_risk(category, quantity, cost_price, lifecycle_start_date)
 
 
-__all__ = ["predict_risk", "model_is_available"]
+__all__ = ["predict_risk", "model_is_available", "get_model_runtime_info"]

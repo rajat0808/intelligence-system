@@ -5,8 +5,8 @@ from sqlalchemy import text
 
 from app.core.dates import normalize_date
 from app.database.engine import engine
-from app.ml.predict import predict_risk
-from app.schemas.ml import MLPredictRequest, MLPredictResponse
+from app.ml.predict import get_model_runtime_info, predict_risk
+from app.schemas.ml import MLPredictRequest, MLPredictResponse, MLStatusResponse
 from app.services.ml_service import predict_and_log
 
 router = APIRouter(prefix="/ml", tags=["ML"])
@@ -26,6 +26,11 @@ def predict(payload: MLPredictRequest):
         store_id=payload.store_id,
     )
     return MLPredictResponse(risk_score=score)
+
+
+@router.get("/status", response_model=MLStatusResponse)
+def ml_status():
+    return get_model_runtime_info()
 
 
 @router.get("/inventory")

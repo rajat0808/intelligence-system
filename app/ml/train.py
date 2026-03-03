@@ -189,10 +189,103 @@ def _build_training_set(rows, *, label_fn, as_of_fn, age_days_fn=None):
     return features, labels, dates
 
 
+def _quantile(values, quantile):
+    if not values:
+        return 0.0
+    quantile_value = min(1.0, max(0.0, float(quantile)))
+    ordered = sorted(float(value) for value in values)
+    index = int(round((len(ordered) - 1) * quantile_value))
+    return ordered[index]
+
+
+def _safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return float(default)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _weak_label_score(row, as_of):
+    start_date = normalize_date(row.get("lifecycle_start_date"))
+    age_days = 0 if start_date is None else max(0, (as_of - start_date).days)
+
+    quantity = max(0.0, _safe_float(row.get("quantity"), default=0.0))
+    cost_price = max(0.0, _safe_float(row.get("cost_price"), default=0.0))
+    stock_value = quantity * cost_price
+
+    category = str(row.get("category") or "").strip().lower()
+    category_bonus = {
+        "lehenga": 0.08,
+        "lehenga bridal": 0.12,
+        "lehenga fancy": 0.1,
+    }.get(category, 0.0)
+
+    age_component = min(age_days / 365.0, 1.0)
+    value_component = min(stock_value / 150000.0, 1.0)
+    quantity_component = min(quantity / 200.0, 1.0)
+
+    score = (
+        (0.6 * age_component)
+        + (0.25 * value_component)
+        + (0.1 * quantity_component)
+        + category_bonus
+    )
+    return float(score), int(age_days)
+
+
+def _build_weak_label_training_set(rows, as_of_date=None):
+    as_of = normalize_date(as_of_date) or date.today()
+    scored_rows = []
+    for row in rows:
+        score, age_days = _weak_label_score(row, as_of)
+        scored_rows.append((row, score, age_days))
+
+    if not scored_rows:
+        return [], [], []
+
+    threshold = _quantile([item[1] for item in scored_rows], 0.6)
+    raw_labels = [1 if item[1] >= threshold else 0 for item in scored_rows]
+
+    # Ensure at least one positive and one negative outcome for training.
+    if len(set(raw_labels)) < 2:
+        ranked_indices = sorted(
+            range(len(scored_rows)),
+            key=lambda idx: scored_rows[idx][1],
+        )
+        split_at = max(1, len(ranked_indices) // 2)
+        raw_labels = [0] * len(scored_rows)
+        for idx in ranked_indices[split_at:]:
+            raw_labels[idx] = 1
+
+    features = []
+    labels = []
+    dates = []
+    for idx, (row, _score, age_days) in enumerate(scored_rows):
+        _append_training_row(
+            features,
+            labels,
+            dates,
+            row,
+            raw_labels[idx],
+            as_of,
+            age_days=age_days,
+        )
+    return features, labels, dates
+
+
 def build_training_data(engine, horizon_days, as_of_date=None):
     sales_rows = _load_sales(engine)
     if not sales_rows:
-        raise ValueError("No sales data available to build outcome labels.")
+        inventory_rows = _load_inventory(engine)
+        if not inventory_rows:
+            raise ValueError("No inventory rows available for training.")
+        features, labels, dates = _build_weak_label_training_set(
+            inventory_rows,
+            as_of_date=as_of_date,
+        )
+        return features, labels, dates, "inventory+weak_labels_no_sales"
 
     snapshot_rows = _load_daily_snapshots(engine)
     if snapshot_rows:

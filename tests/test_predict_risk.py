@@ -1,10 +1,26 @@
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
 
-from app.ml.predict import predict_risk, model_is_available
+from app.ml import predict as predict_module
+from app.ml.predict import get_model_runtime_info, model_is_available, predict_risk
 
 
 class PredictRiskTest(unittest.TestCase):
+    def setUp(self):
+        self._model_state = (
+            predict_module._MODEL,
+            predict_module._MODEL_METADATA,
+            predict_module._MODEL_LOAD_ERROR,
+        )
+
+    def tearDown(self):
+        (
+            predict_module._MODEL,
+            predict_module._MODEL_METADATA,
+            predict_module._MODEL_LOAD_ERROR,
+        ) = self._model_state
+
     def test_risk_bounds(self):
         today = date.today()
         risk = predict_risk("dress", 1, 100, today)
@@ -27,6 +43,49 @@ class PredictRiskTest(unittest.TestCase):
         high_value = predict_risk("saree", 1000, 1000, today)
         self.assertGreaterEqual(high_value, low_value)
         self.assertLessEqual(high_value, 1.0)
+
+    def test_runtime_info_uses_fallback_when_model_missing(self):
+        predict_module._MODEL = None
+        predict_module._MODEL_METADATA = None
+        predict_module._MODEL_LOAD_ERROR = None
+
+        with patch.object(predict_module, "model_available", return_value=False), patch.object(
+            predict_module,
+            "load_model",
+            return_value=(None, None),
+        ):
+            status = get_model_runtime_info()
+
+        self.assertEqual(status["mode"], "heuristic_fallback")
+        self.assertFalse(status["model_available"])
+        self.assertFalse(status["model_loaded"])
+        self.assertEqual(status["load_error"], "model artifact not found")
+
+    def test_model_loader_retries_after_missing_artifact_appears(self):
+        model_obj = object()
+        predict_module._MODEL = None
+        predict_module._MODEL_METADATA = None
+        predict_module._MODEL_LOAD_ERROR = "missing"
+
+        with patch.object(
+            predict_module,
+            "model_available",
+            side_effect=[False, True],
+        ), patch.object(
+            predict_module,
+            "load_model",
+            return_value=(model_obj, {"training_source": "inventory+weak_labels_no_sales"}),
+        ):
+            first = predict_module._load_model_once()
+            second = predict_module._load_model_once()
+
+        self.assertIsNone(first)
+        self.assertIs(second, model_obj)
+        self.assertIs(predict_module._MODEL, model_obj)
+        self.assertEqual(
+            predict_module._MODEL_METADATA["training_source"],
+            "inventory+weak_labels_no_sales",
+        )
 
 
 if __name__ == "__main__":
