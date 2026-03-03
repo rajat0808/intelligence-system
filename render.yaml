@@ -22,7 +22,7 @@ services:
       - key: WHATSAPP_MEDIA_BASE_URL
         value: "https://your-domain.com"
       - key: FOUNDER_PHONE
-        value: "15551234567"
+        value: "7388863677"
       - key: CO_FOUNDER_PHONE
         value: "15557654321"
   - type: worker
@@ -48,6 +48,6 @@ services:
       - key: WHATSAPP_MEDIA_BASE_URL
         value: "https://your-domain.com"
       - key: FOUNDER_PHONE
-        value: "15551234567"
+        value: "7388863677"
       - key: CO_FOUNDER_PHONE
         value: "15557654321"

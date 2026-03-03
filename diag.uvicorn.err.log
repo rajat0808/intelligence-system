@@ -1,0 +1,9 @@
+INFO:     Started server process [26664]
+INFO:     Waiting for application startup.
+2026-02-27T17:45:26 INFO app.services.ingestion_service - Excel auto-import watching: datasource
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+2026-02-27T17:45:38 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update 1.xlsx: daily_update: 0 inserted, 4468 updated
+2026-02-27T17:45:42 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update 2.xlsx: daily_update: 0 inserted, 2200 updated
+2026-02-27T17:45:43 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update.xlsx: daily_update: 0 inserted, 1768 updated
+2026-02-27T17:45:43 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update_template.xlsx: daily_update: 0 inserted, 0 updated
