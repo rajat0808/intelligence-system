@@ -88,6 +88,15 @@ Optional for sending product images in alerts:
 - `WHATSAPP_MEDIA_BASE_URL` (public base URL used to convert relative image paths like `/static/images/ABC.jpg` into absolute URLs)
 - `WHATSAPP_DEFAULT_COUNTRY_CODE` (for example `91`; applied when recipient numbers are stored as 10-digit local numbers)
 
+Telegram alert settings:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_ALERT_TEMPLATE` (optional; use `{message}` placeholder, for example `[ALERT]\n{message}`)
+- `TELEGRAM_FALLBACK_IMAGE` (optional; default `/static/sindh-logo.png`)
+
+Channel toggles:
+- `WHATSAPP_NOTIFICATIONS_ENABLED` (set `false` to send alerts via Telegram only)
+
 WhatsApp Cloud API example:
 ```text
 WHATSAPP_API_URL=https://graph.facebook.com/v19.0/<PHONE_NUMBER_ID>/messages
@@ -100,6 +109,7 @@ CO_FOUNDER_PHONE=15551234568
 Optional defaults (see `app/config.py`):
 - `DATABASE_URL` (default: `sqlite:///./inventory.db`)
 - `ML_ALERT_THRESHOLD` (default: `0.75`)
+- `ALERT_ALWAYS_SEND` (default: `false`; set `true` to resend alerts on every run/startup)
 - `ENVIRONMENT`, `APP_NAME`, `FOUNDER_API_KEY`
 - Dashboard login:
   - `DASHBOARD_USERNAME`
@@ -125,7 +135,7 @@ Optional defaults (see `app/config.py`):
 - `POST /whatsapp/webhook` - Meta webhook event callback receiver
 - `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"item_mrp":4500,"lifecycle_start_date":"2025-01-01"}`
 - `GET /ml/inventory` - ML risk scores from datasource (filters: `store_id`, `product_id`, `category`, `min_risk`, `limit`)
-- `POST /alerts/run` - run alert workflow using datasource (query: `send_notifications=true|false`)
+- `POST /alerts/run` - run alert workflow using datasource (query: `send_notifications=true|false`, `force_resend=true|false`)
 
 ## Database notes
 The API expects these tables to be populated:

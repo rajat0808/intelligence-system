@@ -51,8 +51,11 @@ class Settings(BaseSettings):
     WHATSAPP_MEDIA_BASE_URL: Optional[str] = None
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: Optional[str] = None
     WHATSAPP_DEFAULT_COUNTRY_CODE: Optional[str] = None
+    WHATSAPP_NOTIFICATIONS_ENABLED: bool = False
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_CHAT_ID: Optional[str] = None
+    TELEGRAM_ALERT_TEMPLATE: Optional[str] = None
+    TELEGRAM_FALLBACK_IMAGE: str = "/static/sindh-logo.png"
 
     # ==============================
     # Alert Recipients
@@ -75,6 +78,7 @@ class Settings(BaseSettings):
     ALERT_MIN_CAPITAL_VALUE: float = 15000.0
     ALERT_COOLDOWN_DAYS: int = 2
     ALERT_MAX_PER_RECIPIENT_PER_RUN: int = 20
+    ALERT_ALWAYS_SEND: bool = False
     LOW_STOCK_ALERT_THRESHOLD: int = 5
 
     # ==============================

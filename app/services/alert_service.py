@@ -199,9 +199,12 @@ def _alert_sort_key(alert_reason, age_days, capital_value, ml_risk):
     )
 
 
-def run_alerts(*, send_notifications=True):
+def run_alerts(*, send_notifications=True, always_send=None):
     db = SessionLocal()
     today = date.today()
+    always_send_enabled = (
+        bool(always_send) if always_send is not None else bool(settings.ALERT_ALWAYS_SEND)
+    )
 
     inventories = db.execute(
         select(
@@ -355,15 +358,16 @@ def run_alerts(*, send_notifications=True):
                 if alert_key in sent_alerts:
                     continue
 
-                if _recent_alert_sent(
-                    db,
-                    since_date=cooldown_start,
-                    alert_type=alert_reason,
-                    category=category,
-                    phone=phone,
-                ):
-                    sent_alerts.add(alert_key)
-                    continue
+                if not always_send_enabled:
+                    if _recent_alert_sent(
+                        db,
+                        since_date=cooldown_start,
+                        alert_type=alert_reason,
+                        category=category,
+                        phone=phone,
+                    ):
+                        sent_alerts.add(alert_key)
+                        continue
 
                 existing_alert = _find_existing_alert(
                     db,
@@ -373,41 +377,36 @@ def run_alerts(*, send_notifications=True):
                     phone=phone,
                 )
 
-                if alert_already_sent(
-                    db,
-                    alert_date=today,
-                    alert_type=alert_reason,
-                    category=category,
-                    phone=phone,
-                ):
-                    sent_alerts.add(alert_key)
-                    continue
+                if not always_send_enabled:
+                    if alert_already_sent(
+                        db,
+                        alert_date=today,
+                        alert_type=alert_reason,
+                        category=category,
+                        phone=phone,
+                    ):
+                        sent_alerts.add(alert_key)
+                        continue
 
                 capital_locked = "{:,.0f}".format(capital_value)
                 message = (
                     "\u26A0 INVENTORY ALERT ({})\n\n"
-                    "Recipient: {}\n"
-                    "Reason: {}\n"
                     "Category Name: {}\n"
                     "Department Name: {}\n"
                     "Style Code: {}\n"
                     "Store: {}\n"
                     "Stock Days: {}\n"
                     "Age: {} days\n"
-                    "ML Risk Score: {:.2f}\n"
                     "Capital Locked: \u20B9{}\n"
                     "{}"
                 ).format(
                     today,
-                    recipient_name,
-                    alert_reason,
                     category,
                     candidate["department_name"],
                     candidate["style_code"] or "N/A",
                     candidate["store_label"],
                     candidate["age"],
                     candidate["age"],
-                    ml_risk,
                     capital_locked,
                     candidate["transfer_hint"],
                 )
@@ -417,13 +416,19 @@ def run_alerts(*, send_notifications=True):
                 if send_notifications:
                     channel_failures = []
                     whatsapp_delivered = False
-                    try:
-                        send_whatsapp(message, phone, image_url=candidate["image_url"])
-                        whatsapp_delivered = True
-                    except (RuntimeError, ValueError) as exc:
-                        channel_failures.append("WhatsApp: {}".format(exc))
+                    if settings.WHATSAPP_NOTIFICATIONS_ENABLED:
+                        try:
+                            send_whatsapp(message, phone, image_url=candidate["image_url"])
+                            whatsapp_delivered = True
+                        except (RuntimeError, ValueError) as exc:
+                            channel_failures.append("WhatsApp: {}".format(exc))
 
-                    telegram_results = send_inventory_alert(message, channels=["telegram"])
+                    telegram_image = candidate["image_url"] or settings.TELEGRAM_FALLBACK_IMAGE
+                    telegram_results = send_inventory_alert(
+                        message,
+                        channels=["telegram"],
+                        image_url=telegram_image,
+                    )
                     telegram_delivered = telegram_results.get("telegram", False)
                     if not telegram_delivered:
                         channel_failures.append("Telegram delivery failed")

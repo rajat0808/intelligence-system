@@ -154,14 +154,14 @@ class IngestionServiceTest(unittest.TestCase):
             self.assertTrue(image_url.startswith("/static/images/STYLE-123."))
             self.assertEqual(len(list(image_dir.glob("STYLE-123.*"))), 1)
 
-    def test_resolve_image_url_rejects_non_image_like_suffix(self):
+    def test_resolve_image_url_preserves_explicit_reference(self):
         with patch.object(ingestion_service, "_get_image_index", return_value={}):
             image_url, image_explicit = ingestion_service.resolve_image_url({"image_url": "C.C[12]"})
 
         self.assertTrue(image_explicit)
-        self.assertIsNone(image_url)
+        self.assertEqual(image_url, "C.C[12]")
 
-    def test_build_product_values_clears_invalid_explicit_image(self):
+    def test_build_product_values_keeps_explicit_image_reference(self):
         existing = type("ProductStub", (), {"image_url": "/static/images/old.jpg"})()
         values = ingestion_service.build_product_values(
             store_id=1,
@@ -172,12 +172,12 @@ class IngestionServiceTest(unittest.TestCase):
             supplier_name="SUP",
             mrp=100.0,
             product=existing,
-            image_url=None,
+            image_url="C.C[12]",
             image_explicit=True,
         )
 
         self.assertIn("image_url", values)
-        self.assertIsNone(values["image_url"])
+        self.assertEqual(values["image_url"], "C.C[12]")
 
 
 if __name__ == "__main__":

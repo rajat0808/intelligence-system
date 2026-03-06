@@ -5,7 +5,7 @@ from app.services.channels.telegram_service import send_telegram_alert
 
 logger = logging.getLogger(__name__)
 
-ChannelSender = Callable[[str], bool]
+ChannelSender = Callable[..., bool]
 DispatchResult = dict[str, bool]
 
 _CHANNEL_HANDLERS: dict[str, ChannelSender] = {
@@ -30,7 +30,11 @@ def _resolve_channels(channels: Iterable[str] | None) -> dict[str, ChannelSender
     return selected
 
 
-def _dispatch_alert(message: str, channels: Iterable[str] | None = None) -> DispatchResult:
+def _dispatch_alert(
+    message: str,
+    channels: Iterable[str] | None = None,
+    image_url: str | None = None,
+) -> DispatchResult:
     handlers = _resolve_channels(channels)
     if not handlers:
         logger.warning("No notification channels are configured for alert dispatch.")
@@ -39,7 +43,14 @@ def _dispatch_alert(message: str, channels: Iterable[str] | None = None) -> Disp
     dispatch_result: DispatchResult = {}
     for channel_name, channel_handler in handlers.items():
         try:
-            dispatch_result[channel_name] = bool(channel_handler(message))
+            try:
+                dispatch_result[channel_name] = bool(
+                    channel_handler(message, image_url=image_url)
+                )
+            except TypeError as exc:
+                if "image_url" not in str(exc):
+                    raise
+                dispatch_result[channel_name] = bool(channel_handler(message))
         except Exception:  # pragma: no cover
             logger.exception(
                 "Notification channel '%s' failed while sending alert.",
@@ -83,12 +94,13 @@ def send_low_stock_alert(
 def send_inventory_alert(
     message: str,
     channels: Iterable[str] | None = None,
+    image_url: str | None = None,
 ) -> DispatchResult:
     message_value = str(message or "").strip()
     if not message_value:
         logger.warning("Inventory alert skipped: message is empty.")
         return {}
-    return _dispatch_alert(message_value, channels=channels)
+    return _dispatch_alert(message_value, channels=channels, image_url=image_url)
 
 
 def send_anomaly_alert(

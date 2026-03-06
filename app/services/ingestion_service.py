@@ -892,7 +892,10 @@ def _normalize_image_value(value, image_index):
         return f"/static/images/{filename}"
     if Path(cleaned).suffix.lower() in _IMAGE_EXTENSIONS:
         return f"/static/images/{cleaned}"
-    return None
+    # Preserve explicit datasource reference exactly as provided so
+    # channel-specific handlers can attempt provider-native resolution
+    # (for example Telegram file_id or custom media token).
+    return cleaned
 
 
 def resolve_image_url(row):

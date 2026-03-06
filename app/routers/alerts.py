@@ -13,10 +13,17 @@ def run_alerts_now(
         True,
         description="Send external notifications (WhatsApp + Telegram)",
     ),
+    force_resend: bool = Query(
+        False,
+        description="Ignore cooldown/dedup and resend alerts for matching records.",
+    ),
     _auth=Depends(require_auth),
 ):
     try:
-        stats = run_alerts(send_notifications=send_notifications)
+        stats = run_alerts(
+            send_notifications=send_notifications,
+            always_send=force_resend,
+        )
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "completed", "stats": stats}

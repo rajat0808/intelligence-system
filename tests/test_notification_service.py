@@ -78,6 +78,28 @@ class NotificationServiceTest(unittest.TestCase):
             result = notification_service.send_inventory_alert("   ")
         self.assertEqual(result, {})
 
+    def test_send_inventory_alert_forwards_image_url_when_supported(self):
+        captured = {}
+
+        def fake_telegram_sender(message, image_url=None):
+            captured["message"] = message
+            captured["image_url"] = image_url
+            return True
+
+        with patch.dict(
+            notification_service._CHANNEL_HANDLERS,
+            {"telegram": fake_telegram_sender},
+            clear=True,
+        ):
+            result = notification_service.send_inventory_alert(
+                "Inventory event",
+                image_url="/static/images/ABC.jpg",
+            )
+
+        self.assertEqual(result, {"telegram": True})
+        self.assertEqual(captured["message"], "Inventory event")
+        self.assertEqual(captured["image_url"], "/static/images/ABC.jpg")
+
 
 if __name__ == "__main__":
     unittest.main()
