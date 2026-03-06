@@ -29,9 +29,9 @@ _STAT_MODIFIED_TIME_NS_FIELD = _STAT_MODIFIED_TIME_FIELD + "_ns"
 
 
 def _find_header_index(header_keys, target):
-    for idx, key in enumerate(header_keys):
+    for col_idx, key in enumerate(header_keys):
         if key == target:
-            return idx
+            return col_idx
     return None
 
 
@@ -448,11 +448,17 @@ def _extract_card_layout_images(worksheet, rows, record_metas):
     _IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
     for image_row, image_col, image in anchored_images:
-        right_side_indices = [idx for idx in value_indices if idx > image_col]
+        right_side_indices = [
+            candidate_idx for candidate_idx in value_indices if candidate_idx > image_col
+        ]
         if right_side_indices:
-            value_idx = min(right_side_indices, key=lambda idx: idx - image_col)
+            value_idx = min(
+                right_side_indices, key=lambda candidate_idx: candidate_idx - image_col
+            )
         else:
-            value_idx = min(value_indices, key=lambda idx: abs(idx - image_col))
+            value_idx = min(
+                value_indices, key=lambda candidate_idx: abs(candidate_idx - image_col)
+            )
 
         candidates = records_by_value_idx.get(value_idx) or []
         if not candidates:
@@ -651,13 +657,13 @@ def load_sheet_rows(worksheet):
             return card_rows, card_columns
         if not non_blank_headers:
             return [], set()
-    indices = [(idx, key) for idx, key in enumerate(header_keys) if key]
+    indices = [(col_idx, key) for col_idx, key in enumerate(header_keys) if key]
     columns = {key for key in header_keys if key}
     embedded_images = _extract_embedded_images(worksheet, header_keys)
     store_idx = None
-    for idx, key in indices:
+    for col_idx, key in indices:
         if key == "store_id":
-            store_idx = idx
+            store_idx = col_idx
             break
 
     rows = []
@@ -674,7 +680,7 @@ def load_sheet_rows(worksheet):
                 continue
             if _is_footer_value(store_value):
                 continue
-        record = {key: row[idx] for idx, key in indices}
+        record = {key: row[col_idx] for col_idx, key in indices}
         if embedded_images:
             image_value = embedded_images.get(row_idx)
             if image_value and (

@@ -252,23 +252,23 @@ def _build_weak_label_training_set(rows, as_of_date=None):
     if len(set(raw_labels)) < 2:
         ranked_indices = sorted(
             range(len(scored_rows)),
-            key=lambda idx: scored_rows[idx][1],
+            key=lambda row_index: scored_rows[row_index][1],
         )
         split_at = max(1, len(ranked_indices) // 2)
         raw_labels = [0] * len(scored_rows)
-        for idx in ranked_indices[split_at:]:
-            raw_labels[idx] = 1
+        for ranked_idx in ranked_indices[split_at:]:
+            raw_labels[ranked_idx] = 1
 
     features = []
     labels = []
     dates = []
-    for idx, (row, _score, age_days) in enumerate(scored_rows):
+    for row_index, (row, _score, age_days) in enumerate(scored_rows):
         _append_training_row(
             features,
             labels,
             dates,
             row,
-            raw_labels[idx],
+            raw_labels[row_index],
             as_of,
             age_days=age_days,
         )
@@ -338,7 +338,7 @@ def build_training_data(engine, horizon_days, as_of_date=None):
 def _split_data(labels, dates, test_size, random_state, use_time_split):
     indices = list(range(len(labels)))
     if use_time_split and dates and len(set(dates)) > 1:
-        indices.sort(key=lambda idx: dates[idx])
+        indices.sort(key=lambda row_index: dates[row_index])
         split_idx = max(1, int(len(indices) * (1 - test_size)))
         train_idx = indices[:split_idx]
         test_idx = indices[split_idx:]
@@ -407,10 +407,10 @@ def train_and_export(
     train_idx, test_idx = _split_data(
         labels, dates, test_size, random_state, use_time_split
     )
-    x_train = [features[idx] for idx in train_idx]
-    y_train = [labels[idx] for idx in train_idx]
-    x_test = [features[idx] for idx in test_idx]
-    y_test = [labels[idx] for idx in test_idx]
+    x_train = [features[row_index] for row_index in train_idx]
+    y_train = [labels[row_index] for row_index in train_idx]
+    x_test = [features[row_index] for row_index in test_idx]
+    y_test = [labels[row_index] for row_index in test_idx]
 
     pipeline = Pipeline(
         steps=[
