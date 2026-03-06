@@ -15,8 +15,16 @@ def _is_graph_api_url(api_url):
     return "graph.facebook.com" in api_url.lower()
 
 
-def _normalize_graph_phone(phone):
+def _normalize_country_code(value):
+    digits = _NON_DIGIT_RE.sub("", str(value or ""))
+    return digits
+
+
+def _normalize_graph_phone(phone, default_country_code=None):
     digits = _NON_DIGIT_RE.sub("", phone)
+    country_code = _normalize_country_code(default_country_code)
+    if country_code and len(digits) == 10:
+        return country_code + digits
     return digits
 
 
@@ -72,18 +80,32 @@ def _resolve_whatsapp_config(api_url=None, access_token=None, media_base_url=Non
         if media_base_url is not None
         else (settings.WHATSAPP_MEDIA_BASE_URL or "")
     ).strip()
+    resolved_default_country_code = _normalize_country_code(
+        settings.WHATSAPP_DEFAULT_COUNTRY_CODE
+    )
 
     if not resolved_api_url:
         raise RuntimeError("WHATSAPP_API_URL is not configured")
     if not resolved_access_token:
         raise RuntimeError("WHATSAPP_ACCESS_TOKEN is not configured")
 
-    return _validate_api_url(resolved_api_url), resolved_access_token, resolved_media_base_url
+    return (
+        _validate_api_url(resolved_api_url),
+        resolved_access_token,
+        resolved_media_base_url,
+        resolved_default_country_code,
+    )
 
 
-def _build_payload(api_url, message, phone, image_url=None):
+def _build_payload(
+    api_url,
+    message,
+    phone,
+    image_url=None,
+    default_country_code=None,
+):
     if _is_graph_api_url(api_url):
-        normalized_phone = _normalize_graph_phone(phone)
+        normalized_phone = _normalize_graph_phone(phone, default_country_code)
         if not normalized_phone:
             raise ValueError("phone is required")
         if image_url:
@@ -105,8 +127,20 @@ def _build_payload(api_url, message, phone, image_url=None):
     return payload
 
 
-def build_payload(api_url, message, phone, image_url=None):
-    return _build_payload(api_url, message, phone, image_url)
+def build_payload(
+    api_url,
+    message,
+    phone,
+    image_url=None,
+    default_country_code=None,
+):
+    return _build_payload(
+        api_url,
+        message,
+        phone,
+        image_url,
+        default_country_code=default_country_code,
+    )
 
 
 def _build_template_payload(
@@ -120,11 +154,12 @@ def _build_template_payload(
     transfer_to,
     aging_system_rule,
     image_url=None,
+    default_country_code=None,
 ):
     if not _is_graph_api_url(api_url):
         raise ValueError("Template messaging requires a graph.facebook.com API URL")
 
-    normalized_phone = _normalize_graph_phone(phone)
+    normalized_phone = _normalize_graph_phone(phone, default_country_code)
     if not normalized_phone:
         raise ValueError("phone is required")
 
@@ -172,6 +207,7 @@ def build_template_payload(
     transfer_to,
     aging_system_rule,
     image_url=None,
+    default_country_code=None,
 ):
     return _build_template_payload(
         api_url=api_url,
@@ -184,6 +220,7 @@ def build_template_payload(
         transfer_to=transfer_to,
         aging_system_rule=aging_system_rule,
         image_url=image_url,
+        default_country_code=default_country_code,
     )
 
 
@@ -254,7 +291,12 @@ def send_whatsapp(
     access_token=None,
     media_base_url=None,
 ):
-    resolved_api_url, resolved_access_token, resolved_media_base_url = _resolve_whatsapp_config(
+    (
+        resolved_api_url,
+        resolved_access_token,
+        resolved_media_base_url,
+        resolved_default_country_code,
+    ) = _resolve_whatsapp_config(
         api_url=api_url,
         access_token=access_token,
         media_base_url=media_base_url,
@@ -264,7 +306,13 @@ def send_whatsapp(
     phone_value = _normalize_required(phone, "phone")
 
     media_url = _resolve_media_url(image_url, resolved_media_base_url)
-    payload_obj = _build_payload(resolved_api_url, message_value, phone_value, media_url)
+    payload_obj = _build_payload(
+        resolved_api_url,
+        message_value,
+        phone_value,
+        media_url,
+        default_country_code=resolved_default_country_code,
+    )
     _post_whatsapp_payload(resolved_api_url, resolved_access_token, payload_obj)
 
 
@@ -283,7 +331,12 @@ def send_whatsapp_template(
     access_token=None,
     media_base_url=None,
 ):
-    resolved_api_url, resolved_access_token, resolved_media_base_url = _resolve_whatsapp_config(
+    (
+        resolved_api_url,
+        resolved_access_token,
+        resolved_media_base_url,
+        resolved_default_country_code,
+    ) = _resolve_whatsapp_config(
         api_url=api_url,
         access_token=access_token,
         media_base_url=media_base_url,
@@ -304,5 +357,6 @@ def send_whatsapp_template(
         transfer_to=_normalize_required(transfer_to, "transfer_to"),
         aging_system_rule=_normalize_required(aging_system_rule, "aging_system_rule"),
         image_url=_resolve_media_url(image_url, resolved_media_base_url),
+        default_country_code=resolved_default_country_code,
     )
     _post_whatsapp_payload(resolved_api_url, resolved_access_token, payload_obj)

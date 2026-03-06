@@ -54,6 +54,13 @@ def _heuristic_risk(category, quantity, cost_price, lifecycle_start_date):
     return _clamp(age_component + value_component + category_component)
 
 
+def _is_weak_label_model(metadata):
+    if not isinstance(metadata, dict):
+        return False
+    source = str(metadata.get("training_source") or "").strip().lower()
+    return "weak_labels" in source
+
+
 def _load_model_once():
     global _MODEL, _MODEL_METADATA, _MODEL_LOAD_ERROR
     if _MODEL is not None:
@@ -139,7 +146,16 @@ def predict_risk(
             prob = 1.0 / (1.0 + math.exp(-float(score)))
         else:
             prob = model.predict([features])[0]
-        return _clamp(float(prob))
+
+        probability = _clamp(float(prob))
+
+        # Weak-label training can be overconfident; blend with domain heuristics for stability.
+        if _is_weak_label_model(_MODEL_METADATA):
+            heuristic = _heuristic_risk(category, quantity, cost_price, lifecycle_start_date)
+            probability = (0.65 * probability) + (0.35 * heuristic)
+            probability = _clamp(probability, low=0.02, high=0.98)
+
+        return _clamp(probability)
 
     return _heuristic_risk(category, quantity, cost_price, lifecycle_start_date)
 

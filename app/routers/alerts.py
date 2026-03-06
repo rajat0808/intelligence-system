@@ -9,7 +9,10 @@ router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
 @router.post("/run")
 def run_alerts_now(
-    send_notifications: bool = Query(True, description="Send WhatsApp notifications"),
+    send_notifications: bool = Query(
+        True,
+        description="Send external notifications (WhatsApp + Telegram)",
+    ),
     _auth=Depends(require_auth),
 ):
     try:

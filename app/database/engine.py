@@ -70,6 +70,13 @@ _SQLITE_COLUMN_DEFAULTS = {
     "inventory": {
         "current_price": "REAL NOT NULL DEFAULT 0",
     },
+    "delivery_logs": {
+        "provider_message_id": "TEXT",
+        "webhook_status": "TEXT",
+        "webhook_timestamp": "DATETIME",
+        "metadata_phone_number_id": "TEXT",
+        "raw_payload": "TEXT",
+    },
 }
 
 _SQLITE_POST_ADD_UPDATES = {

@@ -14,6 +14,16 @@ class DecisionEngineTest(unittest.TestCase):
         self.assertEqual(result["status"], "HEALTHY")
         self.assertEqual(result["eligible_actions"], [])
 
+    def test_high_danger_triggers_transfer_action(self):
+        result = evaluate_inventory("dress", 300, "M", "HIGH")
+        self.assertEqual(result["status"], "ACTION_REQUIRED")
+        self.assertIn("PRIORITY_TRANSFER", result["eligible_actions"])
+
+    def test_high_demand_keeps_transfer_review_off(self):
+        result = evaluate_inventory("dress", 220, "H", None)
+        self.assertEqual(result["status"], "HEALTHY")
+        self.assertNotIn("TRANSFER_REVIEW", result["eligible_actions"])
+
 
 if __name__ == "__main__":
     unittest.main()

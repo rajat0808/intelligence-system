@@ -39,6 +39,15 @@ class WhatsAppServiceTest(unittest.TestCase):
         )
         self.assertEqual(payload["image"]["caption"], "Alert text")
 
+    def test_graph_payload_applies_default_country_code_for_10_digit_phone(self):
+        payload = build_payload(
+            "https://graph.facebook.com/v19.0/123/messages",
+            "Alert text",
+            "8303233429",
+            default_country_code="91",
+        )
+        self.assertEqual(payload["to"], "918303233429")
+
     def test_non_graph_payload_includes_media_url(self):
         payload = build_payload(
             "https://api.internal.local/whatsapp/send",
@@ -95,6 +104,22 @@ class WhatsAppServiceTest(unittest.TestCase):
             [parameter["text"] for parameter in components[1]["parameters"]],
             ["S-101", "Kids Wear", "Apparel", "Store 205", "Aging > 45 days"],
         )
+
+    def test_graph_template_payload_applies_default_country_code(self):
+        payload = build_template_payload(
+            api_url="https://graph.facebook.com/v19.0/123/messages",
+            phone="8303233429",
+            template_name="inventory_transfer_alert",
+            language_code="en",
+            store_id="S-101",
+            category="Kids Wear",
+            department="Apparel",
+            transfer_to="Store 205",
+            aging_system_rule="Aging > 45 days",
+            image_url=None,
+            default_country_code="91",
+        )
+        self.assertEqual(payload["to"], "918303233429")
 
     def test_graph_template_payload_without_image_uses_body_only(self):
         payload = build_template_payload(

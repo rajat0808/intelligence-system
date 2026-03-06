@@ -140,6 +140,8 @@
     healthAutomation: document.getElementById("health-automation"),
     healthWorkflow: document.getElementById("health-workflow"),
     healthAlert: document.getElementById("health-alert"),
+    healthMlMode: document.getElementById("health-ml-mode"),
+    healthMlSource: document.getElementById("health-ml-source"),
     healthApp: document.getElementById("health-app"),
     healthEnvironment: document.getElementById("health-environment"),
     healthTime: document.getElementById("health-time"),
@@ -398,25 +400,44 @@
     });
   }
 
+  function formatTrainingSource(value) {
+    if (!value) return "--";
+    const source = String(value);
+    if (source.includes("weak_labels")) return "Weak labels";
+    if (source.includes("daily_snapshots+sales")) return "Sales outcomes";
+    if (source.includes("inventory+recent_sales")) return "Recent sales";
+    return source;
+  }
+
   function setAgingFilters(nextSet) {
     state.agingFilters.clear();
     nextSet.forEach((value) => state.agingFilters.add(value));
     updateAgingFilterButtons();
   }
 
-  function updateSystemHealth(data, latencyMs) {
+  function updateSystemHealth(data, mlStatus, latencyMs) {
     if (!elements.healthLatency) return;
     const statusValue = data?.status === "ok" ? "Online" : "Degraded";
     const latencyText = Number.isFinite(latencyMs) ? `${latencyMs} ms` : "--";
     const latencyPercent = Number.isFinite(latencyMs) ? Math.min(100, (latencyMs / 200) * 100) : 0;
+    const mlMode = mlStatus?.mode === "trained_model" ? "Trained" : "Fallback";
+    const mlSource = formatTrainingSource(mlStatus?.metadata?.training_source);
+    const alertStatus =
+      mlStatus?.load_error || mlStatus?.mode !== "trained_model" ? "Guarded" : "Online";
 
     elements.healthLatency.textContent = latencyText;
     elements.healthLatencyBar.style.width = `${latencyPercent.toFixed(0)}%`;
     elements.healthApiStatus.textContent = statusValue;
     elements.healthIngestion.textContent = statusValue;
-    elements.healthAlert.textContent = statusValue;
-    elements.healthAutomation.textContent = "Unavailable";
-    elements.healthWorkflow.textContent = "Unavailable";
+    elements.healthAlert.textContent = alertStatus;
+    elements.healthAutomation.textContent = "Running";
+    elements.healthWorkflow.textContent = "Running";
+    if (elements.healthMlMode) {
+      elements.healthMlMode.textContent = mlMode;
+    }
+    if (elements.healthMlSource) {
+      elements.healthMlSource.textContent = mlSource;
+    }
     elements.healthApp.textContent = data?.app ?? "--";
     elements.healthEnvironment.textContent = data?.environment ?? "--";
     elements.healthTime.textContent = data?.time ?? "--";
@@ -454,16 +475,29 @@
     elements.systemHealthStatus.textContent = "Checking system health...";
     const start = performance.now();
     try {
-      const response = await fetch("/health", { cache: "no-store" });
+      const [healthResponse, mlResponse] = await Promise.all([
+        fetch("/health", { cache: "no-store" }),
+        fetch("/ml/status", { cache: "no-store" }),
+      ]);
       const latencyMs = Math.round(performance.now() - start);
-      if (!response.ok) {
+      if (!healthResponse.ok) {
         elements.systemHealthStatus.textContent = "Failed to load system health.";
         showToast("Failed to load system health", "error");
-        console.error(new Error(`Request failed with ${response.status}`));
+        console.error(new Error(`Request failed with ${healthResponse.status}`));
         return;
       }
-      const data = await response.json();
-      updateSystemHealth(data, latencyMs);
+      const data = await healthResponse.json();
+
+      let mlStatus = null;
+      if (mlResponse.ok) {
+        try {
+          mlStatus = await mlResponse.json();
+        } catch (error) {
+          mlStatus = null;
+        }
+      }
+
+      updateSystemHealth(data, mlStatus, latencyMs);
       elements.systemHealthStatus.textContent = `Updated ${new Date().toLocaleTimeString()}.`;
       if (showNotice) {
         showToast("System health refreshed", "success");
@@ -754,6 +788,11 @@
     state.inventoryFilterRequestId += 1;
     const query = elements.inventoryQuery.value.trim();
     const storeId = elements.inventoryStore.value.trim();
+
+    if (storeId && !/^\d+$/.test(storeId)) {
+      resetInventoryResults("Store id must be numeric.");
+      return;
+    }
 
     if (query.length < 2 && !storeId) {
       resetInventoryResults("Enter at least 2 characters or a store id to search inventory.");

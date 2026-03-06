@@ -20,6 +20,11 @@ class DeliveryLog(Base):
     capital_value = Column(Float, nullable=False)
     delivered = Column(Boolean, nullable=False)
     failure_reason = Column(String)
+    provider_message_id = Column(String)
+    webhook_status = Column(String)
+    webhook_timestamp = Column(DateTime(timezone=True))
+    metadata_phone_number_id = Column(String)
+    raw_payload = Column(String)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

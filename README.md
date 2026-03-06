@@ -40,6 +40,17 @@ Then open:
 - `localhost:8000/health` for health
 - `localhost:8000/dashboard/` for the dashboard
 
+Simple start without conflicts (recommended on Windows):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start_server.ps1
+```
+This stops old `app.main` Uvicorn processes, loads values from `.env` into the process (overriding stale system env vars), picks a free local port (starting from `8000`), and starts one clean server instance.
+
+Simple stop:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\stop_server.ps1
+```
+
 ## Testing
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
@@ -69,11 +80,13 @@ Required for WhatsApp alerts:
 - `WHATSAPP_ACCESS_TOKEN`
 - `FOUNDER_PHONE`
 - `CO_FOUNDER_PHONE`
+- `WHATSAPP_WEBHOOK_VERIFY_TOKEN` (required only if you use webhook verification)
 
 Note: `POST /whatsapp/send-template` also accepts `api_url` and `access_token` in the request body, so you can override credentials per request.
 
 Optional for sending product images in alerts:
 - `WHATSAPP_MEDIA_BASE_URL` (public base URL used to convert relative image paths like `/static/images/ABC.jpg` into absolute URLs)
+- `WHATSAPP_DEFAULT_COUNTRY_CODE` (for example `91`; applied when recipient numbers are stored as 10-digit local numbers)
 
 WhatsApp Cloud API example:
 ```text
@@ -94,7 +107,7 @@ Optional defaults (see `app/config.py`):
   - `DASHBOARD_SESSION_SECRET`
 - Scheduler: `SCHEDULER_ENABLED`, `SCHEDULER_RUN_AFTER`, `SCHEDULER_POLL_SECONDS`,
 `SCHEDULER_HEARTBEAT_SECONDS`, `SCHEDULER_STALE_SECONDS`, `SCHEDULER_RETRY_SECONDS`,
-`SCHEDULER_MAX_RETRIES`, `SCHEDULER_TZ`
+`SCHEDULER_MAX_RETRIES`, `SCHEDULER_TZ`, `SCHEDULER_RUN_ON_STARTUP`
 
 ## API endpoints
 - `GET /health` - service status
@@ -108,6 +121,8 @@ Optional defaults (see `app/config.py`):
 - `POST /whatsapp/send` - send a WhatsApp message; body: `{"message":"...","phone":"7388863677","image_url":"https://.../item.jpg"}`
 - `POST /whatsapp/send-template` - send a WhatsApp template with transfer details; body:
   `{"phone":"7388863677","store_id":"S-101","category":"Kids Wear","department":"Apparel","transfer_to":"Store 205","aging_system_rule":"Aging > 45 days","image_url":"https://.../item.jpg","template_name":"inventory_transfer_alert","language_code":"en","api_url":"https://graph.facebook.com/v19.0/<PHONE_NUMBER_ID>/messages","access_token":"<ACCESS_TOKEN>"}`
+- `GET /whatsapp/webhook` - Meta webhook verification endpoint (uses `hub.mode`, `hub.verify_token`, `hub.challenge`)
+- `POST /whatsapp/webhook` - Meta webhook event callback receiver
 - `POST /ml/predict` - ML risk score; body: `{"category":"dress","quantity":10,"item_mrp":4500,"lifecycle_start_date":"2025-01-01"}`
 - `GET /ml/inventory` - ML risk scores from datasource (filters: `store_id`, `product_id`, `category`, `min_risk`, `limit`)
 - `POST /alerts/run` - run alert workflow using datasource (query: `send_notifications=true|false`)
@@ -168,7 +183,14 @@ python scripts/seed_data.py
 ```
 
 ## Daily scheduler
-The scheduler runs as a standalone process (separate from FastAPI) and persists state in `job_logs`:
+The scheduler persists state in `job_logs` and now starts automatically with FastAPI when
+`SCHEDULER_ENABLED=true` (default).
+
+Default behavior on server startup:
+- Run one immediate alert pass (`SCHEDULER_RUN_ON_STARTUP=true`)
+- Continue background daily scheduling after `SCHEDULER_RUN_AFTER`
+
+You can still run it as a standalone process if needed:
 ```powershell
 python scripts/run_scheduler.py
 ```

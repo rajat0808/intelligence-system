@@ -21,6 +21,8 @@ services:
         sync: false
       - key: WHATSAPP_MEDIA_BASE_URL
         value: "https://your-domain.com"
+      - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        sync: false
       - key: FOUNDER_PHONE
         value: "7388863677"
       - key: CO_FOUNDER_PHONE

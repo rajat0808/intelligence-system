@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     WHATSAPP_API_URL: Optional[str] = None
     WHATSAPP_ACCESS_TOKEN: Optional[str] = None
     WHATSAPP_MEDIA_BASE_URL: Optional[str] = None
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: Optional[str] = None
+    WHATSAPP_DEFAULT_COUNTRY_CODE: Optional[str] = None
+    TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_CHAT_ID: Optional[str] = None
 
     # ==============================
     # Alert Recipients
@@ -60,8 +64,18 @@ class Settings(BaseSettings):
     # ML
     # ==============================
     ML_ALERT_THRESHOLD: float = 0.75
+    ML_ALERT_HIGH_THRESHOLD: float = 0.85
+    ML_ALERT_CRITICAL_THRESHOLD: float = 0.92
     ML_MODEL_PATH: Optional[str] = None
     ML_MODEL_METADATA_PATH: Optional[str] = None
+
+    # ==============================
+    # Alert Noise Controls
+    # ==============================
+    ALERT_MIN_CAPITAL_VALUE: float = 15000.0
+    ALERT_COOLDOWN_DAYS: int = 2
+    ALERT_MAX_PER_RECIPIENT_PER_RUN: int = 20
+    LOW_STOCK_ALERT_THRESHOLD: int = 5
 
     # ==============================
     # Excel Auto-Import
@@ -84,6 +98,7 @@ class Settings(BaseSettings):
     SCHEDULER_RETRY_SECONDS: int = 300
     SCHEDULER_MAX_RETRIES: int = 3
     SCHEDULER_TZ: str = "local"
+    SCHEDULER_RUN_ON_STARTUP: bool = True
 
 
 @lru_cache

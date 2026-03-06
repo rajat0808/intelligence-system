@@ -19,6 +19,8 @@ def search_inventory(
     alert_only=Query(False, description="Show only items that are in danger"),
 ):
     require_login_api(request)
+    allowed_danger_values = {"EARLY", "HIGH", "CRITICAL"}
+
     if query is not None:
         query = str(query).strip()
         if not query:
@@ -44,6 +46,18 @@ def search_inventory(
             store_id = int(store_id)
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="store_id must be an integer.")
+        if store_id <= 0:
+            raise HTTPException(status_code=400, detail="store_id must be a positive integer.")
+
+    if danger is not None:
+        danger = str(danger).strip().upper()
+        if danger and danger not in allowed_danger_values:
+            raise HTTPException(
+                status_code=400,
+                detail="danger must be one of EARLY, HIGH, CRITICAL.",
+            )
+        if not danger:
+            danger = None
 
     alert_only = str(alert_only).strip().lower() in ("1", "true", "yes", "y")
 

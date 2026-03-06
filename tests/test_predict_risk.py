@@ -87,6 +87,25 @@ class PredictRiskTest(unittest.TestCase):
             "inventory+weak_labels_no_sales",
         )
 
+    def test_weak_label_model_prediction_is_blended_with_heuristic(self):
+        class AlwaysOneModel:
+            @staticmethod
+            def predict_proba(_rows):
+                return [[0.0, 1.0]]
+
+        predict_module._MODEL = AlwaysOneModel()
+        predict_module._MODEL_METADATA = {"training_source": "inventory+weak_labels_no_sales"}
+        predict_module._MODEL_LOAD_ERROR = None
+
+        score = predict_risk(
+            category="dress",
+            quantity=1,
+            cost_price=100.0,
+            lifecycle_start_date=date.today(),
+        )
+        self.assertGreaterEqual(score, 0.02)
+        self.assertLess(score, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
