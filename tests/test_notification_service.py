@@ -100,6 +100,24 @@ class NotificationServiceTest(unittest.TestCase):
         self.assertEqual(captured["message"], "Inventory event")
         self.assertEqual(captured["image_url"], "/static/images/ABC.jpg")
 
+    @patch.dict("os.environ", {"ALERT_MESSAGE_PREFIX": "#"}, clear=False)
+    def test_send_inventory_alert_applies_message_prefix_when_configured(self):
+        captured = {}
+
+        def fake_telegram_sender(message):
+            captured["message"] = message
+            return True
+
+        with patch.dict(
+            notification_service._CHANNEL_HANDLERS,
+            {"telegram": fake_telegram_sender},
+            clear=True,
+        ):
+            result = notification_service.send_inventory_alert("Inventory event")
+
+        self.assertEqual(result, {"telegram": True})
+        self.assertEqual(captured["message"], "# Inventory event")
+
 
 if __name__ == "__main__":
     unittest.main()

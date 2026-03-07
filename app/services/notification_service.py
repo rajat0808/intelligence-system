@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Callable, Iterable
 
 from app.services.channels.telegram_service import send_telegram_alert
@@ -11,6 +12,15 @@ DispatchResult = dict[str, bool]
 _CHANNEL_HANDLERS: dict[str, ChannelSender] = {
     "telegram": send_telegram_alert,
 }
+
+
+def _apply_message_prefix(message: str) -> str:
+    prefix = str(os.getenv("ALERT_MESSAGE_PREFIX") or "").strip()
+    if not prefix:
+        return message
+    if message.startswith(prefix):
+        return message
+    return "{} {}".format(prefix, message)
 
 
 def _resolve_channels(channels: Iterable[str] | None) -> dict[str, ChannelSender]:
@@ -35,6 +45,11 @@ def _dispatch_alert(
     channels: Iterable[str] | None = None,
     image_url: str | None = None,
 ) -> DispatchResult:
+    message = _apply_message_prefix(str(message or "").strip())
+    if not message:
+        logger.warning("Notification dispatch skipped: message is empty.")
+        return {}
+
     handlers = _resolve_channels(channels)
     if not handlers:
         logger.warning("No notification channels are configured for alert dispatch.")

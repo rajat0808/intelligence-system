@@ -322,6 +322,7 @@ def run_alerts(*, send_notifications=True, always_send=None):
                     "image_url": image_url,
                     "store_label": store_label,
                     "transfer_hint": transfer_hint,
+                    "status": status,
                     "age": age,
                     "ml_risk": ml_risk,
                     "capital_value": capital_value,
@@ -397,6 +398,7 @@ def run_alerts(*, send_notifications=True, always_send=None):
                     "Store: {}\n"
                     "Stock Days: {}\n"
                     "Age: {} days\n"
+                    "Aging Status: {}\n"
                     "Capital Locked: \u20B9{}\n"
                     "{}"
                 ).format(
@@ -407,6 +409,7 @@ def run_alerts(*, send_notifications=True, always_send=None):
                     candidate["store_label"],
                     candidate["age"],
                     candidate["age"],
+                    candidate["status"],
                     capital_locked,
                     candidate["transfer_hint"],
                 )

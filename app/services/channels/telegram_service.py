@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 _TELEGRAM_SEND_MESSAGE_URL = "https://api.telegram.org/bot{}/sendMessage"
 _TELEGRAM_SEND_PHOTO_URL = "https://api.telegram.org/bot{}/sendPhoto"
+_TELEGRAM_SEND_DOCUMENT_URL = "https://api.telegram.org/bot{}/sendDocument"
 _REQUEST_TIMEOUT_SECONDS = 10
 _APP_ROOT = Path(__file__).resolve().parents[3]
 _STATIC_DIR = _APP_ROOT / "app" / "static"
@@ -231,4 +232,36 @@ def send_telegram_alert(message: str, image_url: Any = None) -> bool:
     return _is_success_response(response)
 
 
-__all__ = ["send_telegram_alert"]
+def send_telegram_document(file_path: str | Path, caption: str | None = None) -> bool:
+    token, chat_id = _resolve_telegram_config()
+    if not token or not chat_id:
+        return False
+
+    document_path = Path(file_path)
+    if not document_path.exists() or not document_path.is_file():
+        logger.warning("Telegram document send skipped: file not found '%s'.", document_path)
+        return False
+
+    payload = {"chat_id": chat_id}
+    caption_text = str(caption or "").strip()
+    if caption_text:
+        payload["caption"] = caption_text[:1024]
+
+    document_url = _TELEGRAM_SEND_DOCUMENT_URL.format(token)
+    try:
+        with document_path.open("rb") as document_file:
+            response = requests.post(
+                document_url,
+                data=payload,
+                files={"document": (document_path.name, document_file, "application/pdf")},
+                timeout=_REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+    except requests.RequestException:
+        logger.exception("Telegram document API request failed.")
+        return False
+
+    return _is_success_response(response)
+
+
+__all__ = ["send_telegram_alert", "send_telegram_document"]

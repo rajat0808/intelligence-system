@@ -33,6 +33,7 @@ from app.scheduler.job_scheduler import (
 )
 from app.services.alert_service import run_alerts
 from app.services.ingestion_service import ExcelWatchService, ensure_datasource_dir
+from app.services.report_service import create_and_send_daily_alert_report
 
 
 def _import_models():
@@ -81,10 +82,19 @@ excel_watch_service = ExcelWatchService(
 
 def _run_alert_job() -> None:
     stats = run_alerts(send_notifications=True)
+    report = None
+    try:
+        report = create_and_send_daily_alert_report(send_to_telegram=True)
+    except ValueError as exc:
+        logger.warning("Daily PDF report skipped: %s", exc)
+    except Exception:
+        logger.exception("Daily PDF report generation failed.")
+
     logger.info(
-        "Alert workflow completed. snapshots=%s alerts=%s",
+        "Alert workflow completed. snapshots=%s alerts=%s report=%s",
         stats.get("snapshots"),
         stats.get("alerts"),
+        report,
     )
 
 

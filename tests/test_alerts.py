@@ -1,11 +1,13 @@
 import unittest
 from datetime import date
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database.base import Base
 from app.models.alert import Alert
+from app.services import alert_service
 from app.services.alert_service import (
     _is_low_signal_ml_alert,
     _recent_alert_sent,
@@ -135,7 +137,8 @@ class AlertServiceTest(unittest.TestCase):
         self.assertEqual(_resolve_alert_reason("HIGH", 0.99), "RULE-HIGH")
 
     def test_low_signal_ml_alert_filter(self):
-        self.assertTrue(_is_low_signal_ml_alert("ML-RISK-ELEVATED", None, 10.0))
+        with patch.object(alert_service.settings, "ALERT_MIN_CAPITAL_VALUE", 15000.0):
+            self.assertTrue(_is_low_signal_ml_alert("ML-RISK-ELEVATED", None, 10.0))
         self.assertFalse(_is_low_signal_ml_alert("ML-RISK-ELEVATED", "HIGH", 10.0))
         self.assertFalse(_is_low_signal_ml_alert("RULE-CRITICAL", "CRITICAL", 10.0))
 

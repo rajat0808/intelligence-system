@@ -20,6 +20,7 @@ class AgingRulesTest(unittest.TestCase):
         self.assertEqual(classify_status("lehenga", 250), "HEALTHY")
         self.assertEqual(classify_status("lehenga", 365), "TRANSFER")
         self.assertEqual(classify_status("lehenga", 366), "VERY_DANGER")
+        self.assertEqual(classify_status("LEHENGA BRIDAL", 121), "HEALTHY")
 
     def test_saree(self):
         self.assertEqual(classify_status("saree", 365), "HEALTHY")

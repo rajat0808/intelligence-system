@@ -1,11 +1,21 @@
+import os
 from functools import lru_cache
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _resolve_env_file() -> str | None:
+    disable_dotenv = str(os.getenv("IIP_DISABLE_DOTENV", "")).strip().lower()
+    if disable_dotenv in {"1", "true", "yes", "on"}:
+        return None
+
+    env_file = str(os.getenv("IIP_ENV_FILE", ".env")).strip()
+    return env_file or None
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_resolve_env_file(), extra="ignore")
 
     # ==============================
     # Application

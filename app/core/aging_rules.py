@@ -1,5 +1,25 @@
+def _normalize_category(category):
+    category_value = str(category or "").strip().lower()
+    if not category_value:
+        return ""
+
+    normalized = category_value.replace("-", " ").replace("_", " ")
+    normalized = " ".join(normalized.split())
+    compact = normalized.replace(" ", "")
+
+    if "dress material" in normalized or "dress material" in compact:
+        return "dress material"
+    if "lehenga" in normalized:
+        return "lehenga"
+    if "saree" in normalized:
+        return "saree"
+    if "dress" in normalized:
+        return "dress"
+    return normalized
+
+
 def classify_status(category, age):
-    category = str(category).lower()
+    category = _normalize_category(category)
 
     if category == "dress":
         if age <= 90:

@@ -1,9 +1,10 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import requests
 
-from app.services.channels.telegram_service import send_telegram_alert
+from app.services.channels.telegram_service import send_telegram_alert, send_telegram_document
 
 
 class TelegramServiceTest(unittest.TestCase):
@@ -210,6 +211,42 @@ class TelegramServiceTest(unittest.TestCase):
             side_effect=requests.RequestException("network error"),
         ):
             self.assertFalse(send_telegram_alert("Inventory alert"))
+
+    @patch.dict(
+        "os.environ",
+        {"TELEGRAM_BOT_TOKEN": "bot-token", "TELEGRAM_CHAT_ID": "chat-id"},
+        clear=True,
+    )
+    def test_send_telegram_document_posts_expected_payload(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"ok": True}
+
+        document_path = Path("test_report.pdf")
+        document_path.write_bytes(b"%PDF-1.4\n%test\n")
+        try:
+            with patch(
+                "app.services.channels.telegram_service.requests.post",
+                return_value=response,
+            ) as post_mock:
+                result = send_telegram_document(
+                    document_path,
+                    caption="Daily Report",
+                )
+
+            self.assertTrue(result)
+            post_mock.assert_called_once()
+            self.assertEqual(
+                post_mock.call_args.args[0],
+                "https://api.telegram.org/botbot-token/sendDocument",
+            )
+            self.assertEqual(
+                post_mock.call_args.kwargs["data"],
+                {"chat_id": "chat-id", "caption": "Daily Report"},
+            )
+            self.assertIn("document", post_mock.call_args.kwargs["files"])
+        finally:
+            document_path.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
