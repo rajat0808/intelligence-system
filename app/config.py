@@ -90,6 +90,9 @@ class Settings(BaseSettings):
     ALERT_MAX_PER_RECIPIENT_PER_RUN: int = 20
     ALERT_ALWAYS_SEND: bool = False
     LOW_STOCK_ALERT_THRESHOLD: int = 5
+    ALERT_PDF_ONLY: bool = True
+    ALERT_PDF_PRODUCTS_PER_FILE: int = 50
+    ALERT_PDF_MAX_PER_DAY: int = 0
 
     # ==============================
     # Excel Auto-Import

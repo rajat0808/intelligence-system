@@ -33,7 +33,7 @@ from app.scheduler.job_scheduler import (
 )
 from app.services.alert_service import run_alerts
 from app.services.ingestion_service import ExcelWatchService, ensure_datasource_dir
-from app.services.report_service import create_and_send_daily_alert_report
+from app.services.report_service import create_and_send_daily_alert_reports
 
 
 def _import_models():
@@ -81,10 +81,14 @@ excel_watch_service = ExcelWatchService(
 
 
 def _run_alert_job() -> None:
-    stats = run_alerts(send_notifications=True)
+    stats = run_alerts(send_notifications=not settings.ALERT_PDF_ONLY)
     report = None
     try:
-        report = create_and_send_daily_alert_report(send_to_telegram=True)
+        report = create_and_send_daily_alert_reports(
+            send_to_telegram=True,
+            expected_count=settings.ALERT_PDF_PRODUCTS_PER_FILE,
+            max_reports_per_day=settings.ALERT_PDF_MAX_PER_DAY,
+        )
     except ValueError as exc:
         logger.warning("Daily PDF report skipped: %s", exc)
     except Exception:

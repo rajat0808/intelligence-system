@@ -76,8 +76,14 @@ def build_transfer_hint(style_code, style_store_index, current_store_id):
         ),
     )
 
-    store_label = "Store {}".format(best_store["store_id"])
-    if best_store.get("store_name"):
+    store_id_value = str(best_store.get("store_id")).strip()
+    store_name_value = str(best_store.get("store_name") or "").strip()
+    if store_id_value == "1" or store_name_value.casefold() == "store 1":
+        store_label = "HEAD OFFICE"
+    else:
+        store_label = "Store {}".format(best_store["store_id"])
+
+    if best_store.get("store_name") and store_label != "HEAD OFFICE":
         store_label += " ({})".format(best_store["store_name"])
     if best_store.get("store_city"):
         store_label += ", {}".format(best_store["store_city"])
@@ -106,8 +112,14 @@ def build_transfer_hint(style_code, style_store_index, current_store_id):
 
 
 def _format_store_label(store_id, store_name, store_city):
-    label = str(store_id)
-    if store_name:
+    store_id_value = str(store_id).strip() if store_id is not None else ""
+    store_name_value = str(store_name or "").strip()
+    if store_id_value == "1" or store_name_value.casefold() == "store 1":
+        label = "HEAD OFFICE"
+    else:
+        label = str(store_id)
+
+    if store_name and label != "HEAD OFFICE":
         label = "{} ({})".format(label, store_name)
     if store_city:
         label = "{}, {}".format(label, store_city)
@@ -202,6 +214,7 @@ def _alert_sort_key(alert_reason, age_days, capital_value, ml_risk):
 def run_alerts(*, send_notifications=True, always_send=None):
     db = SessionLocal()
     today = date.today()
+    send_notifications_enabled = bool(send_notifications) and not bool(settings.ALERT_PDF_ONLY)
     always_send_enabled = (
         bool(always_send) if always_send is not None else bool(settings.ALERT_ALWAYS_SEND)
     )
@@ -416,7 +429,7 @@ def run_alerts(*, send_notifications=True, always_send=None):
 
                 delivered = False
                 failure_reason = None
-                if send_notifications:
+                if send_notifications_enabled:
                     channel_failures = []
                     whatsapp_delivered = False
                     if settings.WHATSAPP_NOTIFICATIONS_ENABLED:

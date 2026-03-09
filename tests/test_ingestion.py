@@ -161,6 +161,13 @@ class IngestionServiceTest(unittest.TestCase):
         self.assertTrue(image_explicit)
         self.assertEqual(image_url, "C.C[12]")
 
+    def test_resolve_image_url_handles_none_row(self):
+        with patch.object(ingestion_service, "_get_image_index", return_value={}):
+            image_url, image_explicit = ingestion_service.resolve_image_url(None)
+
+        self.assertFalse(image_explicit)
+        self.assertIsNone(image_url)
+
     def test_build_product_values_keeps_explicit_image_reference(self):
         existing = type("ProductStub", (), {"image_url": "/static/images/old.jpg"})()
         values = ingestion_service.build_product_values(

@@ -62,6 +62,24 @@ Stop server:
 powershell -ExecutionPolicy Bypass -File .\scripts\stop_server.ps1
 ```
 
+Run alerts/PDF manually on a running server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_alerts_manual.ps1
+```
+
+Run manually but do not send PDF to Telegram:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_alerts_manual.ps1 -NoPdfTelegram
+```
+
+Reset today's PDF quota files first (archives existing `daily_alert_report_YYYYMMDD_*.pdf`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_alerts_manual.ps1 -ResetTodayQuota
+```
+
 Direct Uvicorn run (alternative):
 
 ```powershell
@@ -137,6 +155,9 @@ Auth behavior:
 - `ALERT_MAX_PER_RECIPIENT_PER_RUN`
 - `ALERT_ALWAYS_SEND`
 - `LOW_STOCK_ALERT_THRESHOLD`
+- `ALERT_PDF_ONLY`
+- `ALERT_PDF_PRODUCTS_PER_FILE`
+- `ALERT_PDF_MAX_PER_DAY` (`0` means no daily limit)
 
 ### Excel Auto-Import
 
@@ -260,6 +281,7 @@ Dedup/cooldown:
 
 - Output file: `daily_alert_report.pdf`
 - Exactly 50 alerts per report (raises error if fewer)
+- Daily file cap is controlled by `ALERT_PDF_MAX_PER_DAY` (`0` = unlimited)
 - Layout:
   - text on left
   - image on right
@@ -476,4 +498,3 @@ The report enforces exactly 50 alerts. Ensure inventory dataset can produce at l
 ## License
 
 MIT (`LICENSE`).
-

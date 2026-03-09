@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.core.logging import setup_logging
 from app.scheduler.job_scheduler import DailyJobScheduler, SchedulerConfig, ensure_scheduler_schema, parse_time
 from app.services.alert_service import run_alerts
-from app.services.report_service import create_and_send_daily_alert_report
+from app.services.report_service import create_and_send_daily_alert_reports
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,13 @@ def main():
     ensure_scheduler_schema()
 
     def run_alerts_with_report():
-        stats = run_alerts(send_notifications=True)
+        stats = run_alerts(send_notifications=not settings.ALERT_PDF_ONLY)
         try:
-            create_and_send_daily_alert_report(send_to_telegram=True)
+            create_and_send_daily_alert_reports(
+                send_to_telegram=True,
+                expected_count=settings.ALERT_PDF_PRODUCTS_PER_FILE,
+                max_reports_per_day=settings.ALERT_PDF_MAX_PER_DAY,
+            )
         except ValueError as exc:
             logger.warning("Daily PDF report skipped: %s", exc)
         except Exception:

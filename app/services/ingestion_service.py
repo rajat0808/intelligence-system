@@ -2,6 +2,7 @@ import importlib
 import logging
 import re
 import threading
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,7 +24,10 @@ logger = logging.getLogger(__name__)
 
 _IMAGE_DIR = STATIC_DIR / "images"
 _IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
-_IMAGE_INDEX_CACHE: dict[str, object] = {"modified_time_ns": None, "index": {}}
+_IMAGE_INDEX_CACHE: dict[str, int | dict[str, str] | None] = {
+    "modified_time_ns": None,
+    "index": {},
+}
 _STAT_MODIFIED_TIME_FIELD = "st_" + "m" + "time"
 _STAT_MODIFIED_TIME_NS_FIELD = _STAT_MODIFIED_TIME_FIELD + "_ns"
 
@@ -87,7 +91,11 @@ def _read_embedded_image_bytes(image):
         data = image_data_loader()
     except (AttributeError, TypeError, ValueError, OSError):
         return None
-    return data or None
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, (bytearray, memoryview)):
+        return bytes(data)
+    return None
 
 
 def _read_stat_modified_time(stat_result, *, nanoseconds=False):
@@ -855,7 +863,7 @@ def _build_image_index():
     return index
 
 
-def _get_image_index():
+def _get_image_index() -> dict[str, str]:
     if not _IMAGE_DIR.exists():
         return {}
     try:
@@ -868,10 +876,17 @@ def _get_image_index():
     if cached_modified_time_ns != current_modified_time_ns:
         _IMAGE_INDEX_CACHE["index"] = _build_image_index()
         _IMAGE_INDEX_CACHE["modified_time_ns"] = current_modified_time_ns
-    return _IMAGE_INDEX_CACHE.get("index") or {}
+    cached_index = _IMAGE_INDEX_CACHE.get("index")
+    if isinstance(cached_index, dict):
+        return cached_index
+    return {}
 
 
-def _normalize_image_value(value, image_index):
+def _normalize_image_value(
+    value,
+    image_index: Mapping[str, str] | None,
+):
+    image_index = image_index or {}
     if _is_blank(value):
         return None
     cleaned = to_str(value, "image_url", required=False)
@@ -898,7 +913,9 @@ def _normalize_image_value(value, image_index):
     return cleaned
 
 
-def resolve_image_url(row):
+def resolve_image_url(row: Mapping[str, object] | None) -> tuple[str | None, bool]:
+    if not isinstance(row, Mapping):
+        return None, False
     image_index = _get_image_index()
     explicit_value = row.get("image_url")
     if not _is_blank(explicit_value):
