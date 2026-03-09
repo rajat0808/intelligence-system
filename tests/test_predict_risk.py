@@ -106,6 +106,26 @@ class PredictRiskTest(unittest.TestCase):
         self.assertGreaterEqual(score, 0.02)
         self.assertLess(score, 1.0)
 
+    def test_model_prediction_failure_falls_back_to_heuristic(self):
+        class BrokenModel:
+            @staticmethod
+            def predict_proba(_rows):
+                raise AttributeError("broken model")
+
+        predict_module._MODEL = BrokenModel()
+        predict_module._MODEL_METADATA = {"training_source": "inventory+ml"}
+        predict_module._MODEL_LOAD_ERROR = None
+
+        score = predict_risk(
+            category="dress",
+            quantity=2,
+            cost_price=100.0,
+            lifecycle_start_date=date.today(),
+        )
+        self.assertGreaterEqual(score, 0.0)
+        self.assertLessEqual(score, 1.0)
+        self.assertIsNone(predict_module._MODEL)
+
 
 if __name__ == "__main__":
     unittest.main()

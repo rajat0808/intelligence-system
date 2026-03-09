@@ -139,23 +139,30 @@ def predict_risk(
 
     model = _load_model_once()
     if model is not None:
-        if hasattr(model, "predict_proba"):
-            prob = model.predict_proba([features])[0][1]
-        elif hasattr(model, "decision_function"):
-            score = model.decision_function([features])[0]
-            prob = 1.0 / (1.0 + math.exp(-float(score)))
-        else:
-            prob = model.predict([features])[0]
+        try:
+            if hasattr(model, "predict_proba"):
+                prob = model.predict_proba([features])[0][1]
+            elif hasattr(model, "decision_function"):
+                score = model.decision_function([features])[0]
+                prob = 1.0 / (1.0 + math.exp(-float(score)))
+            else:
+                prob = model.predict([features])[0]
 
-        probability = _clamp(float(prob))
+            probability = _clamp(float(prob))
 
-        # Weak-label training can be overconfident; blend with domain heuristics for stability.
-        if _is_weak_label_model(_MODEL_METADATA):
-            heuristic = _heuristic_risk(category, quantity, cost_price, lifecycle_start_date)
-            probability = (0.65 * probability) + (0.35 * heuristic)
-            probability = _clamp(probability, low=0.02, high=0.98)
+            # Weak-label training can be overconfident; blend with domain heuristics for stability.
+            if _is_weak_label_model(_MODEL_METADATA):
+                heuristic = _heuristic_risk(category, quantity, cost_price, lifecycle_start_date)
+                probability = (0.65 * probability) + (0.35 * heuristic)
+                probability = _clamp(probability, low=0.02, high=0.98)
 
-        return _clamp(probability)
+            return _clamp(probability)
+        except Exception as exc:
+            # Handle runtime incompatibility (for example, sklearn artifact/version mismatch) safely.
+            global _MODEL, _MODEL_LOAD_ERROR
+            _LOGGER.warning("Model inference failed; falling back to heuristic scoring: %s", exc)
+            _MODEL = None
+            _MODEL_LOAD_ERROR = exc
 
     return _heuristic_risk(category, quantity, cost_price, lifecycle_start_date)
 
