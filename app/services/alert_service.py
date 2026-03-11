@@ -59,13 +59,13 @@ def _build_style_store_index(inventories, today):
 
 def build_transfer_hint(style_code, style_store_index, current_store_id):
     if not style_code:
-        return "Transfer Hint: Style code unavailable for peer-store comparison."
+        return "Style code unavailable for peer-store comparison."
 
     peers = [
         item for item in style_store_index.get(style_code, []) if item["store_id"] != current_store_id
     ]
     if not peers:
-        return "Transfer Hint: No peer-store data for this style yet."
+        return "No peer-store data for this style yet."
 
     best_store = min(
         peers,
@@ -90,7 +90,7 @@ def build_transfer_hint(style_code, style_store_index, current_store_id):
 
     if best_store["status"] == "HEALTHY":
         return (
-            "Transfer Hint: Style {} is doing well at {} "
+            "Style {} is doing well at {} "
             "(status {}, age {} days, qty {})."
         ).format(
             style_code,
@@ -101,7 +101,7 @@ def build_transfer_hint(style_code, style_store_index, current_store_id):
         )
 
     return (
-        "Transfer Hint: No strong healthy signal found. Best available target is {} "
+        "No strong healthy signal found. Best available target is {} "
         "(status {}, age {} days, qty {})."
     ).format(
         store_label,
@@ -226,6 +226,7 @@ def run_alerts(*, send_notifications=True, always_send=None):
             Product.mrp.label("mrp"),
             Product.style_code.label("style_code"),
             Product.department_name.label("department_name"),
+            Product.supplier_name.label("supplier_name"),
             Product.image_url.label("image_url"),
             Store.name.label("store_name"),
             Store.city.label("store_city"),
@@ -267,6 +268,7 @@ def run_alerts(*, send_notifications=True, always_send=None):
             mrp = row.mrp
             style_code = (row.style_code or "").strip()
             department_name = (row.department_name or "").strip() or "Unspecified"
+            supplier_name = (row.supplier_name or "").strip() or "N/A"
             image_url = row.image_url
             store_label = _format_store_label(inv.store_id, row.store_name, row.store_city)
             transfer_hint = build_transfer_hint(style_code, style_store_index, inv.store_id)
@@ -321,6 +323,9 @@ def run_alerts(*, send_notifications=True, always_send=None):
                 product_id=inv.product_id,
             )
 
+            if str(status or "").strip().upper() == "HEALTHY":
+                continue
+
             capital_value = inv.quantity * unit_price
             alert_reason = _resolve_alert_reason(danger, ml_risk)
             if _is_low_signal_ml_alert(alert_reason, danger, capital_value):
@@ -332,6 +337,7 @@ def run_alerts(*, send_notifications=True, always_send=None):
                     "category": category,
                     "style_code": style_code,
                     "department_name": department_name,
+                    "supplier_name": supplier_name,
                     "image_url": image_url,
                     "store_label": store_label,
                     "transfer_hint": transfer_hint,
@@ -402,29 +408,32 @@ def run_alerts(*, send_notifications=True, always_send=None):
                         sent_alerts.add(alert_key)
                         continue
 
-                capital_locked = "{:,.0f}".format(capital_value)
+                mrp_display = "{:,.0f}".format(mrp_value)
+                cbs_qty_display = str(inv.quantity)
+                sold_report_display = "0"
                 message = (
                     "\u26A0 INVENTORY ALERT ({})\n\n"
-                    "Category Name: {}\n"
-                    "Department Name: {}\n"
-                    "Style Code: {}\n"
-                    "Store: {}\n"
+                    "Department: {}\n"
+                    "Category: {}\n"
+                    "Supplier: {}\n"
+                    "MRP: \u20B9{}\n"
+                    "Branch: {}\n"
                     "Stock Days: {}\n"
-                    "Age: {} days\n"
-                    "Aging Status: {}\n"
-                    "Capital Locked: \u20B9{}\n"
-                    "{}"
+                    "Aging: {}\n"
+                    "Purchase Report: 0\n"
+                    "Sold Report: {}\n"
+                    "CBS Qty: {}\n"
                 ).format(
                     today,
-                    category,
                     candidate["department_name"],
-                    candidate["style_code"] or "N/A",
+                    category,
+                    candidate["supplier_name"],
+                    mrp_display,
                     candidate["store_label"],
                     candidate["age"],
-                    candidate["age"],
                     candidate["status"],
-                    capital_locked,
-                    candidate["transfer_hint"],
+                    sold_report_display,
+                    cbs_qty_display,
                 )
 
                 delivered = False

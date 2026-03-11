@@ -1,0 +1,12 @@
+INFO:     Started server process [12900]
+INFO:     Waiting for application startup.
+2026-03-11T17:49:43 INFO app.services.ingestion_service - Excel auto-import watching: datasource
+2026-03-11T17:49:43 INFO app.main - Running alert workflow on server startup.
+2026-03-11T17:49:56 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update 1.xlsx: daily_update: 0 inserted, 4468 updated
+2026-03-11T17:50:02 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update 2.xlsx: daily_update: 0 inserted, 2200 updated
+2026-03-11T17:50:04 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update.xlsx: daily_update: 0 inserted, 1768 updated
+2026-03-11T17:50:04 INFO app.services.ingestion_service - Excel import completed for datasource\daily_update_template.xlsx: daily_update: 0 inserted, 0 updated
+2026-03-11T17:50:47 INFO app.main - Alert workflow completed. snapshots=3316 alerts=48 report={'date': '2026-03-11', 'alerts_per_report': 50, 'reports_limit': 3, 'available_reports': 3, 'existing_reports_today': 3, 'generated_reports': 0, 'reports': [], 'skipped_reason': 'Daily PDF limit already reached for 2026-03-11.'}
+2026-03-11T17:50:47 INFO app.scheduler.job_scheduler - Scheduler started for job daily-intelligence
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)

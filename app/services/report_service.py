@@ -30,19 +30,19 @@ _IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 _DEFAULT_FALLBACK_IMAGE = STATIC_DIR / "sindh-logo.png"
 _PAGE_WIDTH, _PAGE_HEIGHT = letter
 _PAGE_MARGIN = 36
-_ROW_HEIGHT = 130
+_ROW_HEIGHT = 160
 _ROW_GAP = 10
 _ROW_PADDING = 8
 _IMAGE_WIDTH = 122
 _IMAGE_HEIGHT = 108
-_AGING_BADGE_STYLES = {
+_AGING_BADGE_STYLES: dict[str, tuple[str, str]] = {
     "HEALTHY": ("#DCFCE7", "#166534"),
     "TRANSFER": ("#FEF08A", "#854D0E"),
     "RR_TT": ("#FED7AA", "#9A3412"),
     "VERY_DANGER": ("#FECACA", "#991B1B"),
 }
-_DEFAULT_AGING_BADGE_STYLE = ("#E5E7EB", "#374151")
-_AGING_STATUS_SEVERITY = {
+_DEFAULT_AGING_BADGE_STYLE: tuple[str, str] = ("#E5E7EB", "#374151")
+_AGING_STATUS_SEVERITY: dict[str, int] = {
     "HEALTHY": 0,
     "TRANSFER": 1,
     "RR_TT": 2,
@@ -119,10 +119,16 @@ def _coerce_alert(alert: Mapping[str, Any]) -> dict[str, str]:
         "title": str(alert.get("title") or "Unknown Product").strip(),
         "style_code": str(alert.get("style_code") or "").strip(),
         "quantity": str(alert.get("quantity") or "").strip(),
+        "department": str(alert.get("department") or "").strip(),
+        "category": str(alert.get("category") or "").strip(),
+        "supplier": str(alert.get("supplier") or "").strip(),
+        "cbs_qty": str(alert.get("cbs_qty") or alert.get("quantity") or "").strip(),
         "price": str(alert.get("price") or "N/A").strip(),
         "site": str(alert.get("site") or "Unknown Source").strip(),
         "store": str(alert.get("store") or "").strip(),
         "stock_days": str(alert.get("stock_days") or "").strip(),
+        "purchase_report": str(alert.get("purchase_report") or "0").strip(),
+        "sold_report": str(alert.get("sold_report") or "0").strip(),
         "cumulative_quantity": str(alert.get("cumulative_quantity") or "").strip(),
         "aging_status": str(alert.get("aging_status") or "").strip(),
         "transfer_hint": str(alert.get("transfer_hint") or "").strip(),
@@ -367,11 +373,16 @@ def _draw_text_block(
     pdf_canvas: canvas.Canvas,
     *,
     title: str,
+    department: str = "",
+    category: str = "",
+    supplier: str = "",
     price: str,
     site: str,
     store: str = "",
     stock_days: str = "",
-    cumulative_quantity: str = "",
+    purchase_report: str = "",
+    sold_report: str = "",
+    cbs_qty: str = "",
     aging_status: str = "",
     transfer_hint: str = "",
     x: float,
@@ -398,29 +409,51 @@ def _draw_text_block(
 
     pdf_canvas.setFont("Helvetica", 10)
     pdf_canvas.setFillColor(colors.HexColor("#1F2937"))
-    for line in simpleSplit("Price/Data: {}".format(price), "Helvetica", 10, width)[:2]:
+    for line in simpleSplit("Department: {}".format(department or "N/A"), "Helvetica", 10, width)[:2]:
+        pdf_canvas.drawString(x, text_y, line)
+        text_y -= 12
+    for line in simpleSplit("Category: {}".format(category or "N/A"), "Helvetica", 10, width)[:2]:
+        pdf_canvas.drawString(x, text_y, line)
+        text_y -= 12
+    for line in simpleSplit("Supplier: {}".format(supplier or "N/A"), "Helvetica", 10, width)[:2]:
+        pdf_canvas.drawString(x, text_y, line)
+        text_y -= 12
+    for line in simpleSplit("MRP: {}".format(price or "N/A"), "Helvetica", 10, width)[:2]:
         pdf_canvas.drawString(x, text_y, line)
         text_y -= 12
 
     pdf_canvas.setFillColor(colors.HexColor("#374151"))
-    source_text = site
-    if store:
-        source_text = "{} | {}".format(store, site)
-    for line in simpleSplit("Store/Source: {}".format(source_text), "Helvetica", 10, width)[:2]:
+    branch_text = store or site
+    for line in simpleSplit("Branch: {}".format(branch_text or "N/A"), "Helvetica", 10, width)[:2]:
         pdf_canvas.drawString(x, text_y, line)
         text_y -= 12
 
-    if stock_days or cumulative_quantity:
-        stock_text = "Stock Days: {} | Cumulative Qty: {}".format(
-            stock_days or "N/A",
-            cumulative_quantity or "N/A",
-        )
+    if stock_days:
+        stock_text = "Stock Days: {}".format(stock_days or "N/A")
         for line in simpleSplit(stock_text, "Helvetica", 10, width)[:2]:
             pdf_canvas.drawString(x, text_y, line)
             text_y -= 12
 
+    if purchase_report:
+        purchase_text = "Purchase Report: {}".format(purchase_report or "0")
+        for line in simpleSplit(purchase_text, "Helvetica", 10, width)[:2]:
+            pdf_canvas.drawString(x, text_y, line)
+            text_y -= 12
+
+    if sold_report:
+        sold_text = "Sold Report: {}".format(sold_report or "0")
+        for line in simpleSplit(sold_text, "Helvetica", 10, width)[:2]:
+            pdf_canvas.drawString(x, text_y, line)
+            text_y -= 12
+
+    if cbs_qty:
+        cbs_text = "CBS Qty: {}".format(cbs_qty or "N/A")
+        for line in simpleSplit(cbs_text, "Helvetica", 10, width)[:2]:
+            pdf_canvas.drawString(x, text_y, line)
+            text_y -= 12
+
     if aging_status:
-        text_y = _draw_aging_badge(
+        _draw_aging_badge(
             pdf_canvas,
             aging_status=aging_status,
             x=x,
@@ -428,16 +461,7 @@ def _draw_text_block(
             max_width=width,
         )
 
-    if transfer_hint:
-        pdf_canvas.setFillColor(colors.HexColor("#4B5563"))
-        for line in simpleSplit(
-            "Transfer Hint: {}".format(transfer_hint),
-            "Helvetica",
-            9,
-            width,
-        )[:2]:
-            pdf_canvas.drawString(x, text_y, line)
-            text_y -= 12
+    _ = transfer_hint
 
 
 def _draw_alert_row(
@@ -464,11 +488,16 @@ def _draw_alert_row(
     _draw_text_block(
         pdf_canvas,
         title=alert["title"],
+        department=alert.get("department", ""),
+        category=alert.get("category", ""),
+        supplier=alert.get("supplier", ""),
         price=alert["price"],
         site=alert["site"],
         store=alert.get("store", ""),
         stock_days=alert.get("stock_days", ""),
-        cumulative_quantity=alert.get("cumulative_quantity", ""),
+        purchase_report=alert.get("purchase_report", ""),
+        sold_report=alert.get("sold_report", ""),
+        cbs_qty=alert.get("cbs_qty", ""),
         aging_status=alert.get("aging_status", ""),
         transfer_hint=alert.get("transfer_hint", ""),
         x=text_x,
@@ -511,11 +540,16 @@ def _build_grouped_alerts_from_rows(rows: Sequence[Any], *, today: date) -> list
             grouped_item = {
                 "title": title,
                 "style_code": style_code or title,
+                "department": str(getattr(row, "department_name", "") or "").strip(),
+                "category": str(getattr(row, "category", "") or "").strip(),
+                "supplier": str(getattr(row, "supplier_name", "") or "").strip(),
                 "mrp": _safe_float(row.mrp, default=0.0),
                 "total_quantity": quantity,
                 "max_age_days": age_days,
                 "aging_status": aging_status,
                 "image": image_value,
+                "purchase_report": "0",
+                "sold_report": "0",
                 "_has_non_fallback_image": bool(has_non_fallback_image),
                 "_stores": {
                     _format_group_store_label(row.store_id, row.store_name): quantity
@@ -537,6 +571,12 @@ def _build_grouped_alerts_from_rows(rows: Sequence[Any], *, today: date) -> list
 
         if grouped_item["mrp"] <= 0:
             grouped_item["mrp"] = _safe_float(row.mrp, default=0.0)
+        if not grouped_item.get("department"):
+            grouped_item["department"] = str(getattr(row, "department_name", "") or "").strip()
+        if not grouped_item.get("category"):
+            grouped_item["category"] = str(getattr(row, "category", "") or "").strip()
+        if not grouped_item.get("supplier"):
+            grouped_item["supplier"] = str(getattr(row, "supplier_name", "") or "").strip()
 
         if not grouped_item["_has_non_fallback_image"] and has_non_fallback_image:
             grouped_item["image"] = image_value
@@ -555,17 +595,20 @@ def _build_grouped_alerts_from_rows(rows: Sequence[Any], *, today: date) -> list
             {
                 "title": grouped_item["title"],
                 "style_code": grouped_item["style_code"],
+                "department": grouped_item.get("department") or "",
+                "category": grouped_item.get("category") or "",
+                "supplier": grouped_item.get("supplier") or "",
                 "quantity": _format_quantity(total_quantity),
-                "price": "{} | Qty {}".format(
-                    _format_currency(grouped_item["mrp"]),
-                    _format_quantity(total_quantity),
-                ),
+                "cbs_qty": _format_quantity(total_quantity),
+                "price": _format_currency(grouped_item["mrp"]),
                 "site": "Grouped across {} store{}".format(
                     stores_count,
                     "" if stores_count == 1 else "s",
                 ),
                 "store": _format_store_distribution(store_map),
                 "stock_days": str(grouped_item["max_age_days"]),
+                "purchase_report": grouped_item.get("purchase_report") or "0",
+                "sold_report": grouped_item.get("sold_report") or "0",
                 "cumulative_quantity": _format_quantity(total_quantity),
                 "aging_status": aging_status or "N/A",
                 "transfer_hint": "Same style matched across stores (case-insensitive).",
@@ -596,7 +639,11 @@ def _build_grouped_alerts_from_rows(rows: Sequence[Any], *, today: date) -> list
         alert.pop("_max_age_days", None)
         alert.pop("_has_non_fallback_image", None)
 
-    return alerts
+    return [
+        alert
+        for alert in alerts
+        if str(alert.get("aging_status") or "").strip().upper() != "HEALTHY"
+    ]
 
 
 def build_alerts_from_database(*, limit: int | None = ALERTS_PER_PDF) -> list[dict[str, str]]:
@@ -608,6 +655,8 @@ def build_alerts_from_database(*, limit: int | None = ALERTS_PER_PDF) -> list[di
                 Product.article_name.label("article_name"),
                 Product.style_code.label("style_code"),
                 Product.category.label("category"),
+                Product.department_name.label("department_name"),
+                Product.supplier_name.label("supplier_name"),
                 Product.mrp.label("mrp"),
                 Product.image_url.label("image_url"),
                 Store.id.label("store_id"),

@@ -27,7 +27,8 @@ def parse_args() -> argparse.Namespace:
         "--alerts-json",
         help=(
             "Optional JSON file containing alerts as a list of objects with keys: "
-            "title, price, site, image."
+            "title, department, category, supplier, price (MRP), store (branch), "
+            "stock_days, aging_status, purchase_report, cbs_qty, image."
         ),
     )
     parser.add_argument(

@@ -92,7 +92,7 @@ class ReportServiceTest(unittest.TestCase):
                 store_name="Store 1",
                 store_city="Unknown",
                 quantity=1,
-                lifecycle_start_date=date(2026, 2, 20),
+                lifecycle_start_date=date(2025, 11, 20),
             ),
             SimpleNamespace(
                 article_name="Sample Product",
@@ -104,7 +104,7 @@ class ReportServiceTest(unittest.TestCase):
                 store_name="Store 2",
                 store_city="Unknown",
                 quantity=2,
-                lifecycle_start_date=date(2026, 2, 21),
+                lifecycle_start_date=date(2025, 11, 21),
             ),
         ]
         grouped = _build_grouped_alerts_from_rows(rows, today=date(2026, 3, 9))

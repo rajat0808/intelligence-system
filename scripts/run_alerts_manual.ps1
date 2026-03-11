@@ -1,7 +1,10 @@
 param(
     [string]$BaseUrl = "http://127.0.0.1:8000",
+    [Nullable[bool]]$SendNotifications = $null,
     [Nullable[bool]]$SendPdfToTelegram = $null,
+    [switch]$NoNotifications,
     [switch]$NoPdfTelegram,
+    [switch]$PdfOnly,
     [switch]$ForceResend,
     [switch]$ResetTodayQuota
 )
@@ -69,6 +72,27 @@ function Get-SettingValue {
     return $Default
 }
 
+function ConvertTo-Bool {
+    param(
+        [string]$Value,
+        [bool]$Default = $false
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return $Default
+    }
+
+    $normalized = $Value.Trim().ToLowerInvariant()
+    if ($normalized -in @("1", "true", "yes", "on")) {
+        return $true
+    }
+    if ($normalized -in @("0", "false", "no", "off")) {
+        return $false
+    }
+
+    return $Default
+}
+
 function Reset-TodayPdfQuotaFiles {
     param([string]$RootPath)
 
@@ -115,6 +139,18 @@ $apiKeyHeader = Get-SettingValue -Name "API_KEY_HEADER" -DotEnv $dotEnv -Default
 
 Test-ServerHealth -Url $BaseUrl
 
+$sendNotificationsValue = $true
+if ($NoNotifications.IsPresent) {
+    $sendNotificationsValue = $false
+}
+elseif ($null -ne $SendNotifications) {
+    $sendNotificationsValue = [bool]$SendNotifications
+}
+else {
+    $alertPdfOnly = Get-SettingValue -Name "ALERT_PDF_ONLY" -DotEnv $dotEnv
+    $sendNotificationsValue = -not (ConvertTo-Bool -Value $alertPdfOnly -Default $false)
+}
+
 $sendPdfToTelegramValue = $true
 if ($NoPdfTelegram.IsPresent) {
     $sendPdfToTelegramValue = $false
@@ -137,16 +173,21 @@ if (-not [string]::IsNullOrWhiteSpace($apiKey)) {
 }
 
 $query = @{
-    "send_notifications"  = "false"
-    "force_resend"        = if ($ForceResend.IsPresent) { "true" } else { "false" }
-    "generate_pdf_report" = "true"
     "send_pdf_to_telegram" = if ($sendPdfToTelegramValue) { "true" } else { "false" }
+}
+
+if (-not $PdfOnly.IsPresent) {
+    $query["send_notifications"] = if ($sendNotificationsValue) { "true" } else { "false" }
+    $query["force_resend"] = if ($ForceResend.IsPresent) { "true" } else { "false" }
+    $query["generate_pdf_report"] = "true"
 }
 
 $queryString = ($query.GetEnumerator() | Sort-Object Name | ForEach-Object {
         "{0}={1}" -f $_.Key, $_.Value
     }) -join "&"
-$runUrl = "{0}/alerts/run?{1}" -f $BaseUrl.TrimEnd("/"), $queryString
+
+$endpointPath = if ($PdfOnly.IsPresent) { "/alerts/report/run" } else { "/alerts/run" }
+$runUrl = "{0}{1}?{2}" -f $BaseUrl.TrimEnd("/"), $endpointPath, $queryString
 
 Write-Host "Triggering alert workflow at $runUrl"
 

@@ -1,0 +1,9 @@
+Starting server on http://127.0.0.1:8000
+Scheduler and startup alerts run automatically.
+Webhook URL: http://127.0.0.1:8000/whatsapp/webhook
+INFO:     127.0.0.1:62326 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64875 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64876 - "POST /alerts/run?force_resend=false&generate_pdf_report=true&send_notifications=true&send_pdf_to_telegram=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56059 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56060 - "POST /alerts/run?force_resend=false&generate_pdf_report=true&send_notifications=true&send_pdf_to_telegram=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54947 - "GET /health HTTP/1.1" 200 OK

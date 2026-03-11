@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     LOW_STOCK_ALERT_THRESHOLD: int = 5
     ALERT_PDF_ONLY: bool = True
     ALERT_PDF_PRODUCTS_PER_FILE: int = 50
-    ALERT_PDF_MAX_PER_DAY: int = 0
+    ALERT_PDF_MAX_PER_DAY: int = 3
 
     # ==============================
     # Excel Auto-Import

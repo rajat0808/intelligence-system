@@ -78,11 +78,11 @@ class WhatsAppServiceTest(unittest.TestCase):
             phone="738-886-3677",
             template_name="inventory_transfer_alert",
             language_code="en",
-            store_id="S-101",
-            category="Kids Wear",
             department="Apparel",
-            transfer_to="Store 205",
-            aging_system_rule="Aging > 45 days",
+            category="Kids Wear",
+            supplier="Supplier A",
+            mrp="999",
+            branch_code="S-101",
             image_url="https://inventory.example.com/static/images/S-101.jpg",
         )
 
@@ -102,7 +102,7 @@ class WhatsAppServiceTest(unittest.TestCase):
         self.assertEqual(components[1]["type"], "body")
         self.assertEqual(
             [parameter["text"] for parameter in components[1]["parameters"]],
-            ["S-101", "Kids Wear", "Apparel", "Store 205", "Aging > 45 days"],
+            ["Apparel", "Kids Wear", "Supplier A", "999", "S-101"],
         )
 
     def test_graph_template_payload_applies_default_country_code(self):
@@ -111,11 +111,11 @@ class WhatsAppServiceTest(unittest.TestCase):
             phone="8303233429",
             template_name="inventory_transfer_alert",
             language_code="en",
-            store_id="S-101",
-            category="Kids Wear",
             department="Apparel",
-            transfer_to="Store 205",
-            aging_system_rule="Aging > 45 days",
+            category="Kids Wear",
+            supplier="Supplier A",
+            mrp="999",
+            branch_code="S-101",
             image_url=None,
             default_country_code="91",
         )
@@ -127,11 +127,11 @@ class WhatsAppServiceTest(unittest.TestCase):
             phone="7388863677",
             template_name="inventory_transfer_alert",
             language_code="en",
-            store_id="S-101",
-            category="Kids Wear",
             department="Apparel",
-            transfer_to="Store 205",
-            aging_system_rule="Aging > 45 days",
+            category="Kids Wear",
+            supplier="Supplier A",
+            mrp="999",
+            branch_code="S-101",
             image_url=None,
         )
 
@@ -140,7 +140,7 @@ class WhatsAppServiceTest(unittest.TestCase):
         self.assertEqual(components[0]["type"], "body")
         self.assertEqual(
             [parameter["text"] for parameter in components[0]["parameters"]],
-            ["S-101", "Kids Wear", "Apparel", "Store 205", "Aging > 45 days"],
+            ["Apparel", "Kids Wear", "Supplier A", "999", "S-101"],
         )
 
     def test_template_payload_rejects_non_graph_url(self):
@@ -150,11 +150,11 @@ class WhatsAppServiceTest(unittest.TestCase):
                 phone="7388863677",
                 template_name="inventory_transfer_alert",
                 language_code="en",
-                store_id="S-101",
-                category="Kids Wear",
                 department="Apparel",
-                transfer_to="Store 205",
-                aging_system_rule="Aging > 45 days",
+                category="Kids Wear",
+                supplier="Supplier A",
+                mrp="999",
+                branch_code="S-101",
                 image_url=None,
             )
 

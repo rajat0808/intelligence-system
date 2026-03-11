@@ -58,6 +58,43 @@ def run_alerts_now(
     return {"status": "completed", "stats": stats, "report": report}
 
 
+@router.post(
+    "/report/run",
+    summary="Generate daily alert report PDFs on demand",
+)
+def run_daily_alert_report(
+    send_pdf_to_telegram: bool = Query(
+        True,
+        description="Send generated daily alert report PDFs to Telegram.",
+    ),
+    expected_count: int = Query(
+        settings.ALERT_PDF_PRODUCTS_PER_FILE,
+        description="Number of alerts per PDF file.",
+        ge=1,
+    ),
+    max_reports_per_day: int = Query(
+        settings.ALERT_PDF_MAX_PER_DAY,
+        description="Daily cap on PDF reports (0 = unlimited).",
+        ge=0,
+    ),
+    _auth=Depends(require_auth),
+):
+    try:
+        report = create_and_send_daily_alert_reports(
+            send_to_telegram=send_pdf_to_telegram,
+            expected_count=expected_count,
+            max_reports_per_day=max_reports_per_day,
+        )
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {"status": "completed", "report": report}
+
+
 @router.get(
     "/report/pdf",
     response_class=FileResponse,

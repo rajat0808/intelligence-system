@@ -170,6 +170,7 @@ _ALIAS_SPECS = (
     (("item", "mrp"), "mrp"),
     (("price",), "price"),
     (("stock", "days"), "stock_days"),
+    (("purchase", "report"), "purchase_report"),
     (("cbs", "qty"), "quantity"),
     (("qty",), "quantity"),
     (("cost", "price"), "cost_price"),
@@ -232,6 +233,9 @@ CARD_LAYOUT_LABEL_MAP = {
     "quantity": "quantity",
     "cbs_qty": "quantity",
     "stock_days": "stock_days",
+    "purchase_report": "purchase_report",
+    "purchase": "purchase_report",
+    "purchase_qty": "purchase_report",
     "category_name": "category",
     "category": "category",
     "store_id": "store_id",
@@ -388,10 +392,15 @@ def _build_daily_update_row_from_card(record, inferred_store_id):
     if _is_blank(stock_days):
         stock_days = 0
 
+    purchase_report = record.get("purchase_report")
+    if _is_blank(purchase_report):
+        purchase_report = 0
+
     row = {
         "store_id": store_id,
         "supplier_name": supplier_name,
         "stock_days": stock_days,
+        "purchase_report": purchase_report,
         "style_code": style_code,
         "department_name": department_name,
         "category": category,
