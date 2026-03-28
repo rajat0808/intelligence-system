@@ -17,10 +17,17 @@ from app.routers.whatsapp import (
 )
 
 
+class _ClientStub:
+    def __init__(self, host=None):
+        self.host = host
+
+
 class _RequestStub:
-    def __init__(self, payload=None, error=None):
+    def __init__(self, payload=None, error=None, headers=None, client_host=None):
         self._payload = payload
         self._error = error
+        self.headers = headers or {}
+        self.client = _ClientStub(client_host) if client_host is not None else None
 
     async def json(self):
         if self._error:
@@ -31,6 +38,9 @@ class _RequestStub:
 class WhatsAppWebhookVerifyTest(unittest.TestCase):
     def setUp(self):
         self._original_verify_token = os.environ.get("WHATSAPP_WEBHOOK_VERIFY_TOKEN")
+        self._original_webhook_allowlist = os.environ.get(
+            "WHATSAPP_WEBHOOK_IP_ALLOWLIST"
+        )
         get_settings.cache_clear()
 
     def tearDown(self):
@@ -38,6 +48,12 @@ class WhatsAppWebhookVerifyTest(unittest.TestCase):
             os.environ.pop("WHATSAPP_WEBHOOK_VERIFY_TOKEN", None)
         else:
             os.environ["WHATSAPP_WEBHOOK_VERIFY_TOKEN"] = self._original_verify_token
+        if self._original_webhook_allowlist is None:
+            os.environ.pop("WHATSAPP_WEBHOOK_IP_ALLOWLIST", None)
+        else:
+            os.environ["WHATSAPP_WEBHOOK_IP_ALLOWLIST"] = (
+                self._original_webhook_allowlist
+            )
         get_settings.cache_clear()
 
     def test_verify_webhook_returns_challenge(self):
@@ -45,6 +61,7 @@ class WhatsAppWebhookVerifyTest(unittest.TestCase):
         get_settings.cache_clear()
 
         response = verify_webhook(
+            request=_RequestStub(),
             hub_mode="subscribe",
             hub_verify_token="verify-me",
             hub_challenge="123456",
@@ -59,6 +76,7 @@ class WhatsAppWebhookVerifyTest(unittest.TestCase):
 
         with self.assertRaises(HTTPException) as ctx:
             verify_webhook(
+                request=_RequestStub(),
                 hub_mode="subscribe",
                 hub_verify_token="wrong-token",
                 hub_challenge="123456",
@@ -73,6 +91,7 @@ class WhatsAppWebhookVerifyTest(unittest.TestCase):
 
         with self.assertRaises(HTTPException) as ctx:
             verify_webhook(
+                request=_RequestStub(),
                 hub_mode="subscribe",
                 hub_verify_token="anything",
                 hub_challenge="123456",
@@ -83,8 +102,56 @@ class WhatsAppWebhookVerifyTest(unittest.TestCase):
             ctx.exception.detail, "WHATSAPP_WEBHOOK_VERIFY_TOKEN is not configured"
         )
 
+    def test_verify_webhook_rejects_ip_outside_allowlist(self):
+        os.environ["WHATSAPP_WEBHOOK_VERIFY_TOKEN"] = "verify-me"
+        os.environ["WHATSAPP_WEBHOOK_IP_ALLOWLIST"] = (
+            "74.220.48.0/24,74.220.56.0/24"
+        )
+        get_settings.cache_clear()
+
+        with self.assertRaises(HTTPException) as ctx:
+            verify_webhook(
+                hub_mode="subscribe",
+                hub_verify_token="verify-me",
+                hub_challenge="123456",
+                request=_RequestStub(headers={"x-forwarded-for": "8.8.8.8"}),
+            )
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail, "Webhook source IP is not allowed")
+
+    def test_verify_webhook_accepts_ip_in_allowlist(self):
+        os.environ["WHATSAPP_WEBHOOK_VERIFY_TOKEN"] = "verify-me"
+        os.environ["WHATSAPP_WEBHOOK_IP_ALLOWLIST"] = (
+            "74.220.48.0/24,74.220.56.0/24"
+        )
+        get_settings.cache_clear()
+
+        response = verify_webhook(
+            hub_mode="subscribe",
+            hub_verify_token="verify-me",
+            hub_challenge="123456",
+            request=_RequestStub(headers={"x-forwarded-for": "74.220.56.19"}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.body.decode("utf-8"), "123456")
+
 
 class WhatsAppWebhookReceiveTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self._original_webhook_allowlist = os.environ.get("WHATSAPP_WEBHOOK_IP_ALLOWLIST")
+        get_settings.cache_clear()
+
+    def tearDown(self):
+        if self._original_webhook_allowlist is None:
+            os.environ.pop("WHATSAPP_WEBHOOK_IP_ALLOWLIST", None)
+        else:
+            os.environ["WHATSAPP_WEBHOOK_IP_ALLOWLIST"] = (
+                self._original_webhook_allowlist
+            )
+        get_settings.cache_clear()
+
     async def test_receive_webhook_acknowledges_payload(self):
         response = await receive_webhook(
             _RequestStub(payload={"object": "whatsapp_business_account", "entry": []})
@@ -102,6 +169,35 @@ class WhatsAppWebhookReceiveTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertEqual(ctx.exception.detail, "Invalid JSON payload")
+
+    async def test_receive_webhook_rejects_ip_outside_allowlist(self):
+        os.environ["WHATSAPP_WEBHOOK_IP_ALLOWLIST"] = "74.220.48.0/24,74.220.56.0/24"
+        get_settings.cache_clear()
+
+        with self.assertRaises(HTTPException) as ctx:
+            await receive_webhook(
+                _RequestStub(
+                    payload={"object": "whatsapp_business_account", "entry": []},
+                    headers={"x-forwarded-for": "1.1.1.1"},
+                )
+            )
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail, "Webhook source IP is not allowed")
+
+    async def test_receive_webhook_accepts_ip_in_allowlist(self):
+        os.environ["WHATSAPP_WEBHOOK_IP_ALLOWLIST"] = "74.220.48.0/24,74.220.56.0/24"
+        get_settings.cache_clear()
+
+        response = await receive_webhook(
+            _RequestStub(
+                payload={"object": "whatsapp_business_account", "entry": []},
+                headers={"x-forwarded-for": "74.220.48.77"},
+            )
+        )
+
+        self.assertEqual(response["status"], "received")
+        self.assertEqual(response["object"], "whatsapp_business_account")
 
 
 class WhatsAppWebhookStatusPersistenceTest(unittest.TestCase):

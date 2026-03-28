@@ -23,6 +23,8 @@ services:
         value: "https://your-domain.com"
       - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
         sync: false
+      - key: WHATSAPP_WEBHOOK_IP_ALLOWLIST
+        value: "74.220.48.0/24,74.220.56.0/24"
       - key: FOUNDER_PHONE
         value: "7388863677"
       - key: CO_FOUNDER_PHONE

@@ -1,6 +1,9 @@
 import json
 import logging
+from collections.abc import Mapping
 from datetime import date, datetime, timezone
+from functools import lru_cache
+from ipaddress import ip_address, ip_network
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -41,6 +44,93 @@ class WhatsAppTemplateSendRequest(BaseModel):
     media_base_url: Optional[str] = None
 
 
+@lru_cache(maxsize=8)
+def _parse_webhook_ip_allowlist(value: str):
+    entries = []
+    normalized = str(value or "").replace("\n", ",")
+    for token in normalized.split(","):
+        cidr = token.strip()
+        if cidr:
+            entries.append(cidr)
+
+    networks = []
+    for cidr in entries:
+        try:
+            networks.append(ip_network(cidr, strict=False))
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid WHATSAPP_WEBHOOK_IP_ALLOWLIST entry: %s",
+                cidr,
+            )
+    return tuple(networks)
+
+
+def _normalize_ip_text(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.startswith("[") and "]" in text:
+        return text[1:text.index("]")]
+    if text.count(":") == 1 and "." in text:
+        host, _separator, port = text.partition(":")
+        if port.isdigit():
+            return host.strip()
+    return text
+
+
+def _extract_client_ip(request: Request) -> Optional[str]:
+    x_forwarded_for = str(request.headers.get("x-forwarded-for") or "").strip()
+    if x_forwarded_for:
+        first_hop = x_forwarded_for.split(",", 1)[0].strip()
+        normalized = _normalize_ip_text(first_hop)
+        if normalized:
+            return normalized
+
+    x_real_ip = str(request.headers.get("x-real-ip") or "").strip()
+    normalized_real_ip = _normalize_ip_text(x_real_ip)
+    if normalized_real_ip:
+        return normalized_real_ip
+
+    if request.client and request.client.host:
+        normalized_client_ip = _normalize_ip_text(str(request.client.host))
+        if normalized_client_ip:
+            return normalized_client_ip
+    return None
+
+
+def _enforce_webhook_ip_allowlist(request: Optional[Request]) -> None:
+    settings = get_settings()
+    raw_allowlist = str(settings.WHATSAPP_WEBHOOK_IP_ALLOWLIST or "").strip()
+    if not raw_allowlist or request is None:
+        return
+
+    allowlist_networks = _parse_webhook_ip_allowlist(raw_allowlist)
+    if not allowlist_networks:
+        raise HTTPException(
+            status_code=500,
+            detail="WHATSAPP_WEBHOOK_IP_ALLOWLIST is misconfigured",
+        )
+
+    source_ip_text = _extract_client_ip(request)
+    if not source_ip_text:
+        raise HTTPException(status_code=403, detail="Webhook source IP is not allowed")
+
+    try:
+        source_ip = ip_address(source_ip_text)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Webhook source IP is not allowed")
+
+    for network in allowlist_networks:
+        if source_ip in network:
+            return
+
+    logger.warning(
+        "Rejected WhatsApp webhook from IP %s (not in allowlist).",
+        source_ip_text,
+    )
+    raise HTTPException(status_code=403, detail="Webhook source IP is not allowed")
+
+
 def _parse_event_timestamp(value: Any):
     if value is None:
         return None
@@ -54,7 +144,9 @@ def _parse_event_timestamp(value: Any):
         return None
 
 
-def _build_failure_reason(status_payload):
+def _build_failure_reason(status_payload: Mapping[str, Any] | None):
+    if not isinstance(status_payload, Mapping):
+        return None
     errors = status_payload.get("errors")
     if not isinstance(errors, list):
         return None
@@ -79,8 +171,8 @@ def _build_failure_reason(status_payload):
     return "; ".join(messages)
 
 
-def _extract_status_events(payload):
-    if not isinstance(payload, dict):
+def _extract_status_events(payload: Mapping[str, Any] | None):
+    if not isinstance(payload, Mapping):
         return []
 
     events = []
@@ -208,10 +300,13 @@ def _persist_status_events(status_events, *, session_factory=SessionLocal):
 @router.get("/webhook")
 @router.get("/webhook/")
 def verify_webhook(
+    request: Request,
     hub_mode: Optional[str] = Query(None, alias="hub.mode"),
     hub_verify_token: Optional[str] = Query(None, alias="hub.verify_token"),
     hub_challenge: Optional[str] = Query(None, alias="hub.challenge"),
 ):
+    _enforce_webhook_ip_allowlist(request)
+
     verify_token = str(get_settings().WHATSAPP_WEBHOOK_VERIFY_TOKEN or "").strip()
     if not verify_token:
         raise HTTPException(
@@ -231,6 +326,8 @@ def verify_webhook(
 @router.post("/webhook")
 @router.post("/webhook/")
 async def receive_webhook(request: Request):
+    _enforce_webhook_ip_allowlist(request)
+
     try:
         payload = await request.json()
     except ValueError as exc:

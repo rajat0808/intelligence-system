@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     WHATSAPP_ACCESS_TOKEN: Optional[str] = None
     WHATSAPP_MEDIA_BASE_URL: Optional[str] = None
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: Optional[str] = None
+    WHATSAPP_WEBHOOK_IP_ALLOWLIST: Optional[str] = None
     WHATSAPP_DEFAULT_COUNTRY_CODE: Optional[str] = None
     WHATSAPP_NOTIFICATIONS_ENABLED: bool = False
     TELEGRAM_BOT_TOKEN: Optional[str] = None
@@ -93,6 +94,8 @@ class Settings(BaseSettings):
     ALERT_PDF_ONLY: bool = True
     ALERT_PDF_PRODUCTS_PER_FILE: int = 50
     ALERT_PDF_MAX_PER_DAY: int = 3
+    ALERT_SALES_WINDOW_DAYS: int = 30
+    ALERT_PURCHASE_WINDOW_DAYS: int = 30
 
     # ==============================
     # Excel Auto-Import
@@ -102,6 +105,8 @@ class Settings(BaseSettings):
     EXCEL_POLL_SECONDS: int = 10
     EXCEL_IMPORT_SHEETS: Optional[str] = None
     EXCEL_DAILY_UPDATE_SHEET_ALIASES: Optional[str] = None
+    EXCEL_SOLD_REPORT_SHEET_ALIASES: Optional[str] = None
+    EXCEL_PURCHASE_REPORT_SHEET_ALIASES: Optional[str] = None
     EXCEL_CREATE_MISSING_STORES: bool = False
 
     # ==============================
