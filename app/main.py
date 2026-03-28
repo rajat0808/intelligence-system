@@ -62,12 +62,17 @@ def _resolve_session_secret(app_settings: Settings) -> str:
     secret = app_settings.DASHBOARD_SESSION_SECRET or app_settings.JWT_SECRET
     if secret:
         return secret
+
+    generated_secret = secrets.token_urlsafe(32)
     if app_settings.ENVIRONMENT.lower() == "local":
-        return secrets.token_urlsafe(32)
-    raise RuntimeError(
-        "ENVIRONMENT=production requires DASHBOARD_SESSION_SECRET or JWT_SECRET so "
-        "dashboard sessions persist across restarts."
+        return generated_secret
+
+    logger.warning(
+        "DASHBOARD_SESSION_SECRET/JWT_SECRET not set for ENVIRONMENT=%s. "
+        "Using an ephemeral session secret; dashboard sessions will reset on restart.",
+        app_settings.ENVIRONMENT,
     )
+    return generated_secret
 
 _import_models()
 Base.metadata.create_all(bind=engine)
